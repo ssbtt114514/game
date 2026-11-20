@@ -6,6 +6,7 @@
 import { difficultyOf, type GameConfig } from '../config'
 import { SeededRng } from '../rng'
 import { applyClear, detectClears } from './clear'
+import { FluidSimulator } from './fluid'
 import type { GameEvent } from './gameEvents'
 import { Field } from './field'
 import {
@@ -42,6 +43,7 @@ export class GameState {
   readonly speedMultiplier: number
 
   field: Field
+  readonly fluids = new FluidSimulator()
   score = 0
   stage: StageId = 1
   status: GameStatus = 'playing'
@@ -52,6 +54,7 @@ export class GameState {
   gravityTimer = 0
   lockTimer = 0
   grounded = false
+  private fluidAccumulator = 0
 
   private readonly pieceDimensionOverride?: 1 | 2 | 3
   private readonly events: GameEvent[] = []
@@ -103,6 +106,8 @@ export class GameState {
     this.active = null
     this.nextQueue = []
     this.events.length = 0
+    this.fluidAccumulator = 0
+    this.fluids.reset()
     for (const id of ITEM_IDS) this.inventory[id] = 0
     this.fillQueue()
     this.spawnNext()
@@ -240,6 +245,7 @@ export class GameState {
       const dims = this.dimsForStage(next)
       if (dims.w !== this.field.dims.w || dims.d !== this.field.dims.d || dims.h !== this.field.dims.h) {
         this.field = this.field.expand(dims)
+        this.fluids.reset()
         this.events.push({ type: 'resize', dims: { ...dims } })
       }
     }
@@ -385,7 +391,17 @@ export class GameState {
   }
 
   // 以下方法在后续里程碑实现，先保留钩子。
-  protected tickFluids(_delta: number): void {}
+  protected tickFluids(delta: number): void {
+    if (this.stage < 5) return
+    const step = Math.max(16, this.config.fluids.tickMs)
+    this.fluidAccumulator += delta
+    let guard = 0
+    while (this.fluidAccumulator >= step && guard < 8) {
+      this.fluids.tick(this.field, this.rng, this.config)
+      this.fluidAccumulator -= step
+      guard++
+    }
+  }
   protected tickRandomEvents(_delta: number): void {}
   protected applyGasAndGravity(): void {}
   protected dyePass(): void {}

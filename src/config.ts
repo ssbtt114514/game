@@ -140,6 +140,8 @@ export interface FluidConfig {
   condenseColor: number
   /** 单次 tick 处理的活跃格子上限，防止极端场景卡顿。 */
   maxActivePerTick: number
+  /** 岩浆每隔多少个 tick 移动一次（比水黏稠）。 */
+  magmaTickEvery: number
 }
 
 export interface ItemConfig {
@@ -249,7 +251,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     tickMs: 100,
     spreadSideways: true,
     condenseColor: 0,
-    maxActivePerTick: 8192
+    maxActivePerTick: 8192,
+    magmaTickEvery: 2
   },
   items: {
     inventorySlots: 6,
