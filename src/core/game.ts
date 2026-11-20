@@ -31,7 +31,7 @@ import {
   type RotationAxis
 } from './pieces'
 import { stageForScore } from './stages'
-import { CellKind, ITEM_IDS, type Dims, type EventId, type ItemId, type StageId, type Vec3 } from './types'
+import { CellKind, ITEM_IDS, PropFlag, type Dims, type EventId, type ItemId, type StageId, type Vec3 } from './types'
 
 export type GameStatus = 'playing' | 'paused' | 'gameover'
 
@@ -67,6 +67,8 @@ export class GameState {
   lockTimer = 0
   grounded = false
   private fluidAccumulator = 0
+  private propAccumulator = 0
+  private gasPass = 0
 
   private readonly pieceDimensionOverride?: 1 | 2 | 3
   private readonly events: GameEvent[] = []
@@ -119,6 +121,8 @@ export class GameState {
     this.nextQueue = []
     this.events.length = 0
     this.fluidAccumulator = 0
+    this.propAccumulator = 0
+    this.gasPass = 0
     this.fluids.reset()
     this.eventSystem.reset()
     for (const id of ITEM_IDS) this.inventory[id] = 0
@@ -148,6 +152,18 @@ export class GameState {
     this.tickFluids(delta)
     this.tickGravity(delta)
     this.tickLock(delta)
+    this.tickProps(delta)
+  }
+
+  private tickProps(delta: number): void {
+    this.propAccumulator += delta
+    const interval = 300
+    let guard = 0
+    while (this.propAccumulator >= interval && guard < 4) {
+      this.propAccumulator -= interval
+      this.applyGasAndGravity()
+      guard++
+    }
   }
 
   /** 玩家水平移动。 */
@@ -339,7 +355,6 @@ export class GameState {
     this.applyGasAndGravity()
     this.dyePass()
     this.resolveBoard()
-    this.applyGasAndGravity()
     if (this.field.hasStackAtTop()) {
       this.endGame()
       return
@@ -552,9 +567,112 @@ export class GameState {
     this.events.push({ type: 'message', text: '塌方！' })
     if (this.field.hasStackAtTop()) this.endGame()
   }
-  protected applyGasAndGravity(): void {}
-  protected dyePass(): void {}
+  /** 重力方块下落、气体上浮、反重力整体上浮；并刷新染色。 */
+  protected applyGasAndGravity(): void {
+    const field = this.field
+    const dims = field.dims
+    const anti = this.antiGravity
+    const passes = anti ? 1 : Math.min(dims.h, 40)
+    for (let pass = 0; pass < passes; pass++) {
+      let moved = 0
+      this.gasPass++
+      if (anti) {
+        for (let z = dims.h - 2; z >= 0; z--) {
+          for (let y = 0; y < dims.d; y++) {
+            for (let x = 0; x < dims.w; x++) {
+              const from = field.index(x, y, z)
+              if (field.kind[from] !== CellKind.Block) continue
+              const to = field.index(x, y, z + 1)
+              if (field.kind[to] !== CellKind.Empty) continue
+              field.moveIndex(from, to)
+              moved++
+            }
+          }
+        }
+      } else {
+        for (let z = 0; z < dims.h - 1; z++) {
+          for (let y = 0; y < dims.d; y++) {
+            for (let x = 0; x < dims.w; x++) {
+              const from = field.index(x, y, z + 1)
+              if (field.kind[from] !== CellKind.Block) continue
+              const props = field.props[from]
+              if ((props & PropFlag.Gravity) === 0 || (props & GAS_MASK) !== 0) continue
+              const to = field.index(x, y, z)
+              if (field.kind[to] !== CellKind.Empty) continue
+              field.moveIndex(from, to)
+              moved++
+            }
+          }
+        }
+        for (let z = dims.h - 1; z >= 0; z--) {
+          for (let y = 0; y < dims.d; y++) {
+            for (let x = 0; x < dims.w; x++) {
+              const from = field.index(x, y, z)
+              if (field.kind[from] !== CellKind.Block) continue
+              const props = field.props[from]
+              if ((props & GAS_MASK) === 0) continue
+              if (z === dims.h - 1) {
+                field.clearIndex(from)
+                moved++
+                continue
+              }
+              if (!this.gasMovesNow(props)) continue
+              const to = field.index(x, y, z + 1)
+              if (field.kind[to] !== CellKind.Empty) continue
+              field.moveIndex(from, to)
+              moved++
+            }
+          }
+        }
+      }
+      if (moved === 0) break
+    }
+    this.dyePass()
+  }
+
+  private gasMovesNow(props: number): boolean {
+    const level = (props & PropFlag.Gas3) !== 0 ? 3 : (props & PropFlag.Gas2) !== 0 ? 2 : 1
+    return this.gasPass % (4 - level) === 0
+  }
+
+  /** 染色方块把六面接触的其他方块表面染成自身颜色。 */
+  protected dyePass(): void {
+    const field = this.field
+    const dims = field.dims
+    for (let z = 0; z < dims.h; z++) {
+      for (let y = 0; y < dims.d; y++) {
+        for (let x = 0; x < dims.w; x++) {
+          const index = field.index(x, y, z)
+          if (field.kind[index] !== CellKind.Block) continue
+          if ((field.props[index] & PropFlag.Dyed) === 0) continue
+          const color = field.color[index]
+          if (color < 0) continue
+          for (let face = 0; face < 6; face++) {
+            const offset = FACE_OFFSETS[face]
+            const nx = x + offset[0]
+            const ny = y + offset[1]
+            const nz = z + offset[2]
+            if (!field.inBounds(nx, ny, nz)) continue
+            const neighbor = field.index(nx, ny, nz)
+            if (field.kind[neighbor] !== CellKind.Block) continue
+            field.setFace(neighbor, face ^ 1, color)
+            field.setFace(index, face, color)
+          }
+        }
+      }
+    }
+  }
 }
+
+const GAS_MASK = PropFlag.Gas1 | PropFlag.Gas2 | PropFlag.Gas3
+const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1]
+]
 
 function describeClear(
   lines: number,

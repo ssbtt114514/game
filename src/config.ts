@@ -233,7 +233,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     spawnCentered: true
   },
   props: {
-    enabled: { gravity: false, gas: false, liquid: false, dye: false },
+    enabled: { gravity: true, gas: true, liquid: true, dye: true },
     probability: { gravity: 0.2, gas: 0.2, liquid: 0.2, dye: 0.2 },
     gasMaxLevel: 3,
     liquidWeights: { magma: 1, water: 1 }

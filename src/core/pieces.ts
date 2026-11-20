@@ -112,20 +112,21 @@ export function createPiece(
   let pieceColor = baseColor
 
   // 属性仅在启用时按概率赋予；多个属性可叠加。
-  if (config.props.enabled.gravity && rng.chance(config.props.probability.gravity)) {
+  const propsActive = stage >= 5
+  if (propsActive && config.props.enabled.gravity && rng.chance(config.props.probability.gravity)) {
     sharedProps |= PropFlag.Gravity
   }
-  if (config.props.enabled.gas && rng.chance(config.props.probability.gas)) {
+  if (propsActive && config.props.enabled.gas && rng.chance(config.props.probability.gas)) {
     const level = rng.intRange(1, Math.min(3, config.props.gasMaxLevel))
     sharedProps |= level === 1 ? PropFlag.Gas1 : level === 2 ? PropFlag.Gas2 : PropFlag.Gas3
   }
-  if (config.props.enabled.liquid && rng.chance(config.props.probability.liquid)) {
+  if (propsActive && config.props.enabled.liquid && rng.chance(config.props.probability.liquid)) {
     const magma = rng.weighted(config.props.liquidWeights) === 'magma'
     liquidKind = magma ? CellKind.Magma : CellKind.Water
     liquidColor = magma ? BlockColor.Red : BlockColor.Blue
     sharedProps |= magma ? PropFlag.LiquidMagma : PropFlag.LiquidWater
   }
-  if (config.props.enabled.dye && rng.chance(config.props.probability.dye)) {
+  if (propsActive && config.props.enabled.dye && rng.chance(config.props.probability.dye)) {
     sharedProps |= PropFlag.Dyed
     pieceColor = rng.int(6)
   }
