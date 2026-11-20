@@ -1,0 +1,15 @@
+{
+  "$comment": "极难预设：极难难度（2.0x 速度、0% 道具掉率、不可暂停），事件更密集。",
+  "difficulty": "insane",
+  "timing": {
+    "eventCheckMs": 4000
+  },
+  "events": {
+    "weights": {
+      "antiGravity": 2,
+      "bombRain": 4,
+      "rain": 2,
+      "collapse": 3
+    }
+  }
+}

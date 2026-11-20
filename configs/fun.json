@@ -1,0 +1,21 @@
+{
+  "$comment": "趣味自定义预设：简单难度、高属性概率、高频事件、随机种子。",
+  "difficulty": "easy",
+  "seed": null,
+  "props": {
+    "probability": {
+      "gravity": 0.35,
+      "gas": 0.3,
+      "liquid": 0.3,
+      "dye": 0.4
+    }
+  },
+  "events": {
+    "weights": {
+      "antiGravity": 3,
+      "bombRain": 3,
+      "rain": 4,
+      "collapse": 2
+    }
+  }
+}

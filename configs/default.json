@@ -1,0 +1,5 @@
+{
+  "$comment": "默认预设。完整默认配置定义在 src/config.ts，本文件只列出与默认值一致的覆盖项，作为 JSON 结构示例。",
+  "difficulty": "normal",
+  "seed": null
+}
