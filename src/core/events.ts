@@ -25,6 +25,21 @@ export class EventSystem {
   private bombAccumulator = 0
   private bombFallAccumulator = 0
 
+  snapshot(): Array<[EventId, number]> {
+    return [...this.active.entries()]
+  }
+
+  restore(entries: Array<[EventId, number]>): void {
+    this.active.clear()
+    for (const [id, remaining] of entries) {
+      if (remaining > 0) this.active.set(id, remaining)
+    }
+    this.checkTimer = 0
+    this.rainAccumulator = 0
+    this.bombAccumulator = 0
+    this.bombFallAccumulator = 0
+  }
+
   reset(): void {
     this.active.clear()
     this.checkTimer = 0

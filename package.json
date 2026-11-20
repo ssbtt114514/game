@@ -1,6 +1,6 @@
 {
   "name": "tetris-plus",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "俄罗斯方块 Plus - 1D/2D/3D 逐阶段进化的三维俄罗斯方块",
