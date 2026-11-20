@@ -1,31 +1,80 @@
 /**
- * HUD 覆盖层：分数、阶段、FPS、提示与种子。
- * 使用 DOM 渲染，避免与 Three.js 主循环耦合。
+ * HUD：分数、阶段、难度、下一块预览、库存、事件、横幅与弹层。
  */
 
-import { STAGE_NAMES } from '../config'
-import type { StageId } from '../core/types'
+import { COLOR_HEX, ITEM_META } from '../config'
+import type { GameState } from '../core/game'
+import { stageLabel } from '../core/stages'
+import type { Piece } from '../core/pieces'
+import { ITEM_IDS, type ItemId } from '../core/types'
 
-function requireElement(id: string): HTMLElement {
+function requireElement<T extends HTMLElement = HTMLElement>(id: string): T {
   const element = document.getElementById(id)
   if (!element) throw new Error(`HUD 元素缺失: #${id}`)
-  return element
+  return element as T
+}
+
+function colorCss(index: number): string {
+  const value = COLOR_HEX[Math.max(0, Math.min(COLOR_HEX.length - 1, index))]
+  return `#${value.toString(16).padStart(6, '0')}`
+}
+
+export interface ActiveEventView {
+  label: string
+  remainingMs: number
 }
 
 export class Hud {
   private readonly scoreEl = requireElement('stat-score')
   private readonly stageEl = requireElement('stat-stage')
+  private readonly difficultyEl = requireElement('stat-difficulty')
   private readonly fpsEl = requireElement('stat-fps')
   private readonly hintEl = requireElement('hint')
   private readonly seedEl = requireElement('seed-label')
-  private lastFps = -1
+  private readonly nextCanvas = requireElement<HTMLCanvasElement>('next-preview')
+  private readonly inventoryEl = requireElement('inventory')
+  private readonly dropRateEl = requireElement('item-drop-rate')
+  private readonly eventsEl = requireElement('active-events')
+  private readonly bannerEl = requireElement('banner')
+  private readonly bannerTitleEl = requireElement('banner-title')
+  private readonly bannerSubEl = requireElement('banner-sub')
+  private readonly toastEl = requireElement('toast')
+  private readonly overlayEl = requireElement('overlay')
+  private readonly overlayCardEl = requireElement('overlay-card')
 
-  setScore(score: number): void {
-    this.scoreEl.textContent = String(score)
+  private lastScore = -1
+  private lastStage = -1
+  private lastDifficulty = ''
+  private lastFps = -1
+  private lastNext = ''
+  private lastInventory = ''
+  private lastEvents = ''
+  private bannerTimer = 0
+  private toastTimer = 0
+  private readonly itemCountEls = new Map<ItemId, HTMLElement>()
+  private readonly itemRowEls = new Map<ItemId, HTMLElement>()
+
+  constructor() {
+    this.buildInventory()
   }
 
-  setStage(stage: StageId): void {
-    this.stageEl.textContent = STAGE_NAMES[stage - 1]
+  sync(game: GameState): void {
+    if (game.score !== this.lastScore) {
+      this.lastScore = game.score
+      this.scoreEl.textContent = String(game.score)
+    }
+    if (game.stage !== this.lastStage) {
+      this.lastStage = game.stage
+      this.stageEl.textContent = stageLabel(game.stage)
+    }
+    const difficulty = game.difficulty.label
+    if (difficulty !== this.lastDifficulty) {
+      this.lastDifficulty = difficulty
+      this.difficultyEl.textContent = difficulty
+    }
+    this.setNext(game.nextQueue[0] ?? null, game.dimension)
+    this.setInventory(game.inventory)
+    this.dropRateEl.textContent = `${Math.round(game.difficulty.itemDropRate * 100)}%`
   }
 
   setFps(fps: number): void {
@@ -42,4 +91,173 @@ export class Hud {
   setSeed(seed: number): void {
     this.seedEl.textContent = `seed ${seed}`
   }
+
+  setActiveEvents(events: ActiveEventView[]): void {
+    const signature = events.map((e) => `${e.label}:${Math.ceil(e.remainingMs / 1000)}`).join('|')
+    if (signature === this.lastEvents) return
+    this.lastEvents = signature
+    if (events.length === 0) {
+      this.eventsEl.innerHTML = '<li class="muted">无</li>'
+      return
+    }
+    this.eventsEl.innerHTML = ''
+    for (const event of events) {
+      const li = document.createElement('li')
+      li.className = 'event-item'
+      const name = document.createElement('span')
+      name.textContent = event.label
+      const time = document.createElement('span')
+      time.className = 'event-time'
+      time.textContent = `${Math.ceil(event.remainingMs / 1000)}s`
+      li.append(name, time)
+      this.eventsEl.append(li)
+    }
+  }
+
+  showBanner(title: string, sub = '', durationMs = 2200): void {
+    this.bannerTitleEl.textContent = title
+    this.bannerSubEl.textContent = sub
+    this.bannerEl.classList.remove('hidden')
+    window.clearTimeout(this.bannerTimer)
+    this.bannerTimer = window.setTimeout(() => this.bannerEl.classList.add('hidden'), durationMs)
+  }
+
+  toast(text: string, durationMs = 1600): void {
+    this.toastEl.textContent = text
+    this.toastEl.classList.remove('hidden')
+    window.clearTimeout(this.toastTimer)
+    this.toastTimer = window.setTimeout(() => this.toastEl.classList.add('hidden'), durationMs)
+  }
+
+  showOverlay(content: HTMLElement, onEscape?: () => void): void {
+    this.overlayCardEl.replaceChildren(content)
+    this.overlayEl.classList.remove('hidden')
+    this.overlayEscape = onEscape
+  }
+
+  hideOverlay(): void {
+    this.overlayEl.classList.add('hidden')
+    this.overlayEscape = undefined
+  }
+
+  get overlayOpen(): boolean {
+    return !this.overlayEl.classList.contains('hidden')
+  }
+
+  handleEscape(): boolean {
+    if (!this.overlayEscape) return false
+    this.overlayEscape()
+    return true
+  }
+
+  private overlayEscape?: () => void
+
+  private buildInventory(): void {
+    this.inventoryEl.innerHTML = ''
+    for (const id of ITEM_IDS) {
+      const li = document.createElement('li')
+      li.className = 'item disabled'
+      const key = document.createElement('span')
+      key.className = 'item-key'
+      key.textContent = ITEM_META[id].key
+      const name = document.createElement('span')
+      name.className = 'item-name'
+      name.textContent = ITEM_META[id].name
+      const count = document.createElement('span')
+      count.className = 'item-count'
+      count.textContent = '0'
+      li.append(key, name, count)
+      this.inventoryEl.append(li)
+      this.itemCountEls.set(id, count)
+      this.itemRowEls.set(id, li)
+    }
+  }
+
+  private setInventory(inventory: Record<ItemId, number>): void {
+    const signature = ITEM_IDS.map((id) => inventory[id]).join(',')
+    if (signature === this.lastInventory) return
+    this.lastInventory = signature
+    for (const id of ITEM_IDS) {
+      const count = inventory[id]
+      const countEl = this.itemCountEls.get(id)
+      const rowEl = this.itemRowEls.get(id)
+      if (countEl) countEl.textContent = String(count)
+      if (rowEl) rowEl.classList.toggle('disabled', count <= 0)
+    }
+  }
+
+  private setNext(piece: Piece | null, dimension: 1 | 2 | 3): void {
+    const signature = piece
+      ? `${piece.id}:${piece.colors.join('')}:${piece.cells.map((c) => `${c.x},${c.y},${c.z}`).join(';')}:${dimension}`
+      : 'none'
+    if (signature === this.lastNext) return
+    this.lastNext = signature
+    this.drawNext(piece, dimension)
+  }
+
+  private drawNext(piece: Piece | null, dimension: 1 | 2 | 3): void {
+    const ctx = this.nextCanvas.getContext('2d')
+    if (!ctx) return
+    const width = this.nextCanvas.width
+    const height = this.nextCanvas.height
+    ctx.clearRect(0, 0, width, height)
+    if (!piece) return
+
+    const projected = piece.cells.map((cell) => {
+      if (dimension === 3) {
+        return { sx: cell.x - cell.y * 0.6, sy: -cell.z + (cell.x + cell.y) * 0.28 }
+      }
+      return { sx: cell.x, sy: -cell.z }
+    })
+
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (const p of projected) {
+      minX = Math.min(minX, p.sx)
+      maxX = Math.max(maxX, p.sx)
+      minY = Math.min(minY, p.sy)
+      maxY = Math.max(maxY, p.sy)
+    }
+    const spanX = Math.max(1, maxX - minX + 1)
+    const spanY = Math.max(1, maxY - minY + 1)
+    const cell = Math.max(6, Math.min(30, Math.min((width - 28) / spanX, (height - 24) / spanY)))
+    const offsetX = (width - spanX * cell) / 2 - minX * cell
+    const offsetY = (height - spanY * cell) / 2 - minY * cell
+
+    for (let i = 0; i < piece.cells.length; i++) {
+      const p = projected[i]
+      const x = p.sx * cell + offsetX
+      const y = p.sy * cell + offsetY
+      const color = colorCss(piece.colors[i])
+      ctx.fillStyle = color
+      ctx.strokeStyle = 'rgba(4, 10, 20, 0.85)'
+      ctx.lineWidth = 1.5
+      const pad = 1.2
+      ctx.beginPath()
+      roundRect(ctx, x + pad, y + pad, cell - pad * 2, cell - pad * 2, Math.min(4, cell * 0.18))
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'
+      ctx.fillRect(x + pad + 2, y + pad + 2, Math.max(1, cell - pad * 2 - 4), Math.max(1, cell * 0.12))
+    }
+  }
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const r = Math.min(radius, width / 2, height / 2)
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + width, y, x + width, y + height, r)
+  ctx.arcTo(x + width, y + height, x, y + height, r)
+  ctx.arcTo(x, y + height, x, y, r)
+  ctx.arcTo(x, y, x + width, y, r)
+  ctx.closePath()
 }

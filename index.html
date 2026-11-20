@@ -27,15 +27,46 @@
               <span class="stat-value" id="stat-stage">一</span>
             </div>
             <div class="stat">
+              <span class="stat-label">难度</span>
+              <span class="stat-value stat-small" id="stat-difficulty">正常</span>
+            </div>
+            <div class="stat">
               <span class="stat-label">FPS</span>
-              <span class="stat-value" id="stat-fps">--</span>
+              <span class="stat-value stat-small" id="stat-fps">--</span>
             </div>
           </div>
         </div>
+
+        <aside class="side-panel">
+          <section class="panel-block">
+            <h3 class="panel-title">下一块</h3>
+            <canvas id="next-preview" width="184" height="132"></canvas>
+          </section>
+          <section class="panel-block">
+            <h3 class="panel-title">道具 <span class="panel-sub" id="item-drop-rate"></span></h3>
+            <ul class="inventory" id="inventory"></ul>
+          </section>
+          <section class="panel-block">
+            <h3 class="panel-title">事件</h3>
+            <ul class="event-list" id="active-events"><li class="muted">无</li></ul>
+          </section>
+        </aside>
+
         <div class="hud-bottom">
-          <span id="hint">M0 骨架：场景、相机、配置加载、帧循环已就绪</span>
+          <span id="hint">方向键移动 · Q/E 旋转 · 空格硬降 · Esc 暂停</span>
           <span id="seed-label" class="seed-label"></span>
         </div>
+
+        <div id="banner" class="banner hidden">
+          <div id="banner-title" class="banner-title"></div>
+          <div id="banner-sub" class="banner-sub"></div>
+        </div>
+
+        <div id="toast" class="toast hidden"></div>
+      </div>
+
+      <div id="overlay" class="overlay hidden">
+        <div id="overlay-card" class="overlay-card"></div>
       </div>
 
       <div id="loading" class="loading">

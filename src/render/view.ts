@@ -6,7 +6,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { GameConfig } from '../config'
-import type { Dims } from '../core/types'
+import type { GameState } from '../core/game'
+import type { Dims, Vec3 } from '../core/types'
+import { CellRenderer } from './blocks'
 
 const BOARD_LINE = 0x2f4266
 const FLOOR_LINE = 0x22304b
@@ -22,6 +24,7 @@ export class GameView {
   private readonly boardGroup: THREE.Group
   private readonly resizeObserver: ResizeObserver
   private readonly canvas: HTMLCanvasElement
+  private readonly cells: CellRenderer
   private dims: Dims
 
   constructor(canvas: HTMLCanvasElement, config: GameConfig) {
@@ -39,16 +42,16 @@ export class GameView {
 
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x070b14)
-    this.scene.fog = new THREE.Fog(0x070b14, 45, 140)
+    this.scene.fog = new THREE.Fog(0x070b14, 60, 260)
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 400)
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1600)
 
     this.controls = new OrbitControls(this.camera, canvas)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.enablePan = false
-    this.controls.minDistance = 6
-    this.controls.maxDistance = 160
+    this.controls.minDistance = 4
+    this.controls.maxDistance = 600
     this.controls.minPolarAngle = 0.12
     this.controls.maxPolarAngle = Math.PI * 0.495
     this.controls.rotateSpeed = 0.65
@@ -56,6 +59,8 @@ export class GameView {
 
     this.boardGroup = new THREE.Group()
     this.scene.add(this.boardGroup)
+
+    this.cells = new CellRenderer(this.scene, config)
 
     this.addLights()
     this.setDims(this.dims, true)
@@ -71,6 +76,20 @@ export class GameView {
     this.rebuildBoard()
     if (resetCamera) this.frameCamera()
     this.resize()
+  }
+
+  /** 同步游戏状态到渲染层。 */
+  sync(game: GameState): void {
+    const dims = game.field.dims
+    if (dims.w !== this.dims.w || dims.d !== this.dims.d || dims.h !== this.dims.h) {
+      this.setDims(dims)
+    }
+    this.cells.sync(game)
+  }
+
+  /** 高亮道具目标。 */
+  setHighlight(cell: Vec3 | null): void {
+    this.cells.setHighlight(cell)
   }
 
   /** 更新轨道控制阻尼。 */
@@ -89,6 +108,7 @@ export class GameView {
     const target = new THREE.Vector3(0, h * 0.45, 0)
     const distance = Math.max(w, h, d * 2) * 1.35
     this.camera.position.set(w * 0.95, h * 0.72 + distance * 0.35, distance)
+    this.scene.fog = new THREE.Fog(0x070b14, Math.max(60, distance), Math.max(200, distance * 4))
     this.camera.lookAt(target)
     this.controls.target.copy(target)
     this.controls.update()
@@ -106,6 +126,7 @@ export class GameView {
   dispose(): void {
     this.resizeObserver.disconnect()
     this.controls.dispose()
+    this.cells.dispose()
     this.renderer.dispose()
   }
 

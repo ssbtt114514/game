@@ -3,7 +3,7 @@
  */
 
 import './styles.css'
-import { difficultyOf, loadConfig } from './config'
+import { loadConfig } from './config'
 import { GameApp } from './app'
 
 function hideLoading(): void {
@@ -31,12 +31,7 @@ function boot(): void {
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error('未找到 #game canvas')
 
   const config = loadConfig()
-  const preset = new URLSearchParams(location.search).get('preset') ?? 'default'
-
   const app = new GameApp(canvas, config)
-  app.setHint(
-    `M0 骨架就绪 · 预设 ${preset} · 难度 ${difficultyOf(config).label} · 拖动旋转视角 / 滚轮缩放`
-  )
   app.start()
   hideLoading()
 
