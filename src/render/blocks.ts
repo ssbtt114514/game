@@ -101,6 +101,9 @@ export class CellRenderer {
   private readonly ghost: CubeBatch
   private readonly highlight: THREE.LineSegments
   private field: Field | null = null
+  private solidCells: Vec3[] = []
+  private fluidCells: Vec3[] = []
+  private bombCells: Vec3[] = []
   private dims: Dims = { w: 1, d: 1, h: 1 }
   private lastSolidVersion = -1
 
@@ -172,6 +175,21 @@ export class CellRenderer {
     this.rebuildGhost(game)
   }
 
+  /** 射线拾取：返回最近的方块/流体/炸弹所在格。 */
+  pick(raycaster: THREE.Raycaster): Vec3 | null {
+    const meshes = [this.solid.mesh, this.fluid.mesh, this.bomb.mesh]
+    const lists = [this.solidCells, this.fluidCells, this.bombCells]
+    const hits = raycaster.intersectObjects(meshes, false)
+    for (const hit of hits) {
+      if (hit.instanceId === undefined) continue
+      const index = meshes.indexOf(hit.object as THREE.InstancedMesh)
+      if (index < 0) continue
+      const cell = lists[index][hit.instanceId]
+      if (cell) return cell
+    }
+    return null
+  }
+
   /** 高亮道具目标格。 */
   setHighlight(cell: Vec3 | null): void {
     if (!cell) {
@@ -195,6 +213,7 @@ export class CellRenderer {
   private rebuildSolid(field: Field): void {
     const scale = this.config.render.blockScale
     this.solid.begin()
+    this.solidCells = []
     const kind = field.kind
     for (let i = 0; i < kind.length; i++) {
       if (kind[i] !== CellKind.Block) continue
@@ -202,6 +221,7 @@ export class CellRenderer {
       const colorIndex = field.color[i]
       const color: number = colorIndex >= 0 && colorIndex < COLOR_HEX.length ? COLOR_HEX[colorIndex] : 0xbfd0e6
       this.solid.push(this.wx(cell.x), this.wy(cell.z), this.wz(cell.y), color, scale)
+      this.solidCells.push(cell)
     }
     this.solid.end()
   }
@@ -209,11 +229,13 @@ export class CellRenderer {
   private rebuildFluids(field: Field): void {
     const scale = this.config.render.blockScale
     this.fluid.begin()
+    this.fluidCells = []
     for (const index of field.fluidSet) {
       const cell = field.cellFromIndex(index)
       const kind = field.kind[index]
       const color = kind === CellKind.Magma ? MAGMA_COLOR : WATER_COLOR
       this.fluid.push(this.wx(cell.x), this.wy(cell.z), this.wz(cell.y), color, scale)
+      this.fluidCells.push(cell)
     }
     this.fluid.end()
   }
@@ -221,9 +243,11 @@ export class CellRenderer {
   private rebuildBombs(field: Field): void {
     const scale = this.config.render.blockScale * 0.9
     this.bomb.begin()
+    this.bombCells = []
     for (const index of field.bombSet) {
       const cell = field.cellFromIndex(index)
       this.bomb.push(this.wx(cell.x), this.wy(cell.z), this.wz(cell.y), BOMB_COLOR, scale)
+      this.bombCells.push(cell)
     }
     this.bomb.end()
   }

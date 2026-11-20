@@ -70,6 +70,27 @@ export class GameView {
     this.resize()
   }
 
+  /** 将屏幕坐标转换为场地格坐标，用于道具选点。 */
+  pickCell(clientX: number, clientY: number): Vec3 | null {
+    const rect = this.canvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    )
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(ndc, this.camera)
+    const cell = this.cells.pick(raycaster)
+    if (cell) return cell
+    const point = new THREE.Vector3()
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    if (!raycaster.ray.intersectPlane(plane, point)) return null
+    const x = Math.floor(point.x + this.dims.w / 2)
+    const y = Math.floor(point.z + this.dims.d / 2)
+    if (x < 0 || x >= this.dims.w || y < 0 || y >= this.dims.d) return null
+    return { x, y, z: 0 }
+  }
+
   /** 切换场地尺寸并重建边框（阶段切换时调用）。 */
   setDims(dims: Dims, resetCamera = false): void {
     this.dims = { ...dims }

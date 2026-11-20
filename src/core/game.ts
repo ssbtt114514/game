@@ -6,7 +6,18 @@
 import { difficultyOf, type GameConfig } from '../config'
 import { SeededRng } from '../rng'
 import { applyClear, detectClears } from './clear'
+import { EVENT_META, EventSystem } from './events'
 import { FluidSimulator } from './fluid'
+import {
+  crossCells,
+  drainCells,
+  lineCells,
+  settleDown,
+  spongeCells,
+  tntCells,
+  wallBombCells,
+  type ItemOptions
+} from './items'
 import type { GameEvent } from './gameEvents'
 import { Field } from './field'
 import {
@@ -20,7 +31,7 @@ import {
   type RotationAxis
 } from './pieces'
 import { stageForScore } from './stages'
-import { ITEM_IDS, type Dims, type ItemId, type StageId, type Vec3 } from './types'
+import { CellKind, ITEM_IDS, type Dims, type EventId, type ItemId, type StageId, type Vec3 } from './types'
 
 export type GameStatus = 'playing' | 'paused' | 'gameover'
 
@@ -44,6 +55,7 @@ export class GameState {
 
   field: Field
   readonly fluids = new FluidSimulator()
+  readonly eventSystem = new EventSystem()
   score = 0
   stage: StageId = 1
   status: GameStatus = 'playing'
@@ -85,7 +97,7 @@ export class GameState {
   }
 
   get antiGravity(): boolean {
-    return false
+    return this.eventSystem.isActive('antiGravity')
   }
 
   dimsForStage(stage: StageId): Dims {
@@ -108,6 +120,7 @@ export class GameState {
     this.events.length = 0
     this.fluidAccumulator = 0
     this.fluids.reset()
+    this.eventSystem.reset()
     for (const id of ITEM_IDS) this.inventory[id] = 0
     this.fillQueue()
     this.spawnNext()
@@ -325,25 +338,29 @@ export class GameState {
   private postLock(): void {
     this.applyGasAndGravity()
     this.dyePass()
-    const outcome = detectClears(this.field, this.stage, this.config)
-    if (outcome.cells.size > 0) {
-      const removed = applyClear(this.field, outcome.cells)
-      this.addScore(outcome.points)
-      this.events.push({
-        type: 'clear',
-        points: outcome.points,
-        lines: outcome.lines,
-        layers: outcome.layers + outcome.cubeLayers,
-        text: describeClear(outcome.lines, outcome.layers, outcome.cubeLayers, outcome.colorClears, removed)
-      })
-      this.rollItemDrop()
-      this.applyGasAndGravity()
-    }
+    this.resolveBoard()
+    this.applyGasAndGravity()
     if (this.field.hasStackAtTop()) {
       this.endGame()
       return
     }
     if (this.status === 'playing') this.spawnNext()
+  }
+
+  /** 计算并结算当前场地的消除（锁定与道具共用）。 */
+  private resolveBoard(): void {
+    const outcome = detectClears(this.field, this.stage, this.config)
+    if (outcome.cells.size === 0) return
+    const removed = applyClear(this.field, outcome.cells)
+    this.addScore(outcome.points)
+    this.events.push({
+      type: 'clear',
+      points: outcome.points,
+      lines: outcome.lines,
+      layers: outcome.layers + outcome.cubeLayers,
+      text: describeClear(outcome.lines, outcome.layers, outcome.cubeLayers, outcome.colorClears, removed)
+    })
+    this.rollItemDrop()
   }
 
   private fillQueue(): void {
@@ -384,8 +401,45 @@ export class GameState {
     this.addItem(item)
   }
 
+  /** 使用道具：目标由渲染层射线选取，效果在核心层结算。 */
+  useItem(item: ItemId, target: Vec3, options: ItemOptions = {}): boolean {
+    if (this.status !== 'playing') return false
+    if (!this.inventory[item] || this.inventory[item] <= 0) return false
+    if (!this.field.inBounds(target.x, target.y, target.z)) return false
+    const field = this.field
+    this.inventory[item]--
+    if (item === 'tnt') {
+      this.destroyCells(tntCells(field, target, this.config.items.tntRadius))
+    } else if (item === 'crossTnt') {
+      this.destroyCells(crossCells(field, target))
+    } else if (item === 'lineTnt') {
+      this.destroyCells(lineCells(field, target, options.axis ?? 0))
+    } else if (item === 'sponge') {
+      this.destroyCells(spongeCells(field, target))
+    } else if (item === 'drain') {
+      this.destroyCells(drainCells(field, target))
+    } else {
+      this.destroyCells(wallBombCells(field, target, options.size === 5 ? 5 : 3))
+      settleDown(field)
+    }
+    this.resolveBoard()
+    if (this.field.hasStackAtTop()) this.endGame()
+    return true
+  }
+
+  private destroyCells(indices: number[]): void {
+    for (const index of indices) {
+      const kind = this.field.kind[index] as CellKind
+      if (kind === CellKind.Empty) continue
+      // 岩浆本身就是液体，爆炸不再额外消灭它。
+      if (kind === CellKind.Magma) continue
+      this.field.clearIndex(index)
+    }
+  }
+
   /** 添加道具到库存。 */
   addItem(item: ItemId, count = 1): void {
+    this.events.push({ type: 'item', item })
     const max = this.config.items.maxStackPerType
     this.inventory[item] = Math.min(max, this.inventory[item] + count)
   }
@@ -402,7 +456,102 @@ export class GameState {
       guard++
     }
   }
-  protected tickRandomEvents(_delta: number): void {}
+  protected tickRandomEvents(delta: number): void {
+    this.eventSystem.tick(delta, this)
+  }
+
+  /** 触发指定随机事件（调试与验收入口）。 */
+  triggerEvent(id: EventId): void {
+    this.eventSystem.trigger(id, this)
+  }
+
+  emitEventStart(id: EventId): void {
+    this.events.push({ type: 'event-start', event: id })
+    this.events.push({ type: 'message', text: `事件：${EVENT_META[id].name}` })
+  }
+
+  emitEventEnd(id: EventId): void {
+    this.events.push({ type: 'event-end', event: id })
+  }
+
+  /** 雨天：在顶部随机空列生成一格水。 */
+  spawnRainWater(): void {
+    const dims = this.field.dims
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const x = this.rng.intRange(0, dims.w - 1)
+      const y = this.rng.intRange(0, dims.d - 1)
+      if (!this.field.isEmpty(x, y, dims.h - 1)) continue
+      this.field.setCell(x, y, dims.h - 1, {
+        kind: CellKind.Water,
+        color: 5,
+        props: 0,
+        faces: 0
+      })
+      return
+    }
+  }
+
+  /** 炸弹雨：在顶部随机空列生成一枚炸弹。 */
+  spawnBomb(): void {
+    const dims = this.field.dims
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const x = this.rng.intRange(0, dims.w - 1)
+      const y = this.rng.intRange(0, dims.d - 1)
+      if (!this.field.isEmpty(x, y, dims.h - 1)) continue
+      this.field.setCell(x, y, dims.h - 1, {
+        kind: CellKind.Bomb,
+        color: 7,
+        props: 0,
+        faces: 0
+      })
+      return
+    }
+  }
+
+  /** 推进所有炸弹：下落，遇阻立即按 TNT 规则爆炸。 */
+  tickBombs(steps = 1): void {
+    for (let step = 0; step < steps; step++) {
+      let exploded = 0
+      for (const index of [...this.field.bombSet]) {
+        if (this.field.kind[index] !== CellKind.Bomb) continue
+        const cell = this.field.cellFromIndex(index)
+        if (cell.z > 0 && this.field.isEmpty(cell.x, cell.y, cell.z - 1)) {
+          this.field.moveIndex(index, this.field.index(cell.x, cell.y, cell.z - 1))
+        } else {
+          this.field.clearIndex(index)
+          this.destroyCells(tntCells(this.field, cell, this.config.items.tntRadius))
+          exploded++
+        }
+      }
+      if (exploded > 0) {
+        this.resolveBoard()
+        if (this.field.hasStackAtTop()) this.endGame()
+      }
+    }
+  }
+
+  /** 塌方：随机框壁开缺口，所有悬空方块落到底。 */
+  performCollapse(): void {
+    const dims = this.field.dims
+    const size = Math.min(5, Math.max(3, this.config.events.collapseWallNotch)) as 3 | 5
+    const center = {
+      x: this.rng.intRange(0, dims.w - 1),
+      y: this.rng.intRange(0, dims.d - 1),
+      z: this.rng.intRange(0, dims.h - 1)
+    }
+    const wall = this.rng.int(6)
+    if (wall === 0) center.x = 0
+    else if (wall === 1) center.x = dims.w - 1
+    else if (wall === 2) center.y = 0
+    else if (wall === 3) center.y = dims.d - 1
+    else if (wall === 4) center.z = 0
+    else center.z = dims.h - 1
+    this.destroyCells(wallBombCells(this.field, center, size))
+    settleDown(this.field)
+    this.resolveBoard()
+    this.events.push({ type: 'message', text: '塌方！' })
+    if (this.field.hasStackAtTop()) this.endGame()
+  }
   protected applyGasAndGravity(): void {}
   protected dyePass(): void {}
 }

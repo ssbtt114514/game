@@ -157,6 +157,9 @@ export class Hud {
     for (const id of ITEM_IDS) {
       const li = document.createElement('li')
       li.className = 'item disabled'
+      li.dataset.item = id
+      li.title = ITEM_META[id].desc
+      li.tabIndex = 0
       const key = document.createElement('span')
       key.className = 'item-key'
       key.textContent = ITEM_META[id].key
@@ -171,6 +174,17 @@ export class Hud {
       this.itemCountEls.set(id, count)
       this.itemRowEls.set(id, li)
     }
+  }
+
+  /** 点击库存道具时回调。 */
+  onItemClick(handler: (id: ItemId) => void): void {
+    this.inventoryEl.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement
+      const row = target.closest<HTMLElement>('li[data-item]')
+      if (!row) return
+      const id = row.dataset.item as ItemId | undefined
+      if (id) handler(id)
+    })
   }
 
   private setInventory(inventory: Record<ItemId, number>): void {

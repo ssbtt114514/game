@@ -8,7 +8,7 @@ import { CellKind } from '../src/core/types'
 
 const dims = { w: 3, d: 3, h: 5 }
 
-function cell(x: number, y: number, z: number) {
+function cell(_x: number, _y: number, _z: number) {
   return { kind: CellKind.Water, color: 5, props: 0, faces: 0 }
 }
 

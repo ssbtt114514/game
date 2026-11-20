@@ -8,6 +8,8 @@ export interface GameInputHandlers {
   hardDrop(): void
   rotate(axis: RotationAxis, direction: 1 | -1): void
   useItem(slot: number): void
+  targetOption(option: string): void
+  isTargeting(): boolean
   escape(): void
   dimension(): 1 | 2 | 3
 }
@@ -32,7 +34,10 @@ const HANDLED_KEYS = new Set([
   'Digit3',
   'Digit4',
   'Digit5',
-  'Digit6'
+  'Digit6',
+  'KeyX',
+  'KeyY',
+  'KeyZ'
 ])
 
 export class KeyboardInput {
@@ -100,11 +105,19 @@ export class KeyboardInput {
         break
       case 'Digit1':
       case 'Digit2':
-      case 'Digit3':
       case 'Digit4':
-      case 'Digit5':
       case 'Digit6':
         this.handlers.useItem(Number(event.code.slice(5)))
+        break
+      case 'Digit3':
+      case 'Digit5':
+        if (this.handlers.isTargeting()) this.handlers.targetOption(`size${event.code.slice(5)}`)
+        else this.handlers.useItem(Number(event.code.slice(5)))
+        break
+      case 'KeyX':
+      case 'KeyY':
+      case 'KeyZ':
+        if (this.handlers.isTargeting()) this.handlers.targetOption(event.code.slice(3).toLowerCase())
         break
       default:
         break

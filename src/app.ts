@@ -2,11 +2,12 @@
  * 应用装配：游戏状态、渲染、HUD、输入与主循环。
  */
 
-import type { GameConfig } from './config'
+import { ITEM_META, type GameConfig } from './config'
+import { EVENT_META } from './core/events'
 import { GameState } from './core/game'
 import type { GameEvent } from './core/gameEvents'
 import { stageLabel } from './core/stages'
-import type { StageId } from './core/types'
+import { ITEM_IDS, type ItemId, type StageId, type Vec3 } from './core/types'
 import { KeyboardInput } from './input/input'
 import { GameView } from './render/view'
 import { Hud } from './ui/hud'
@@ -19,6 +20,7 @@ export class GameApp {
   seed: number
 
   private game: GameState
+  private readonly canvas: HTMLCanvasElement
   private readonly view: GameView
   private readonly hud: Hud
   private readonly input: KeyboardInput
@@ -28,10 +30,15 @@ export class GameApp {
   private fpsFrames = 0
   private fpsElapsed = 0
   private gameOverShown = false
+  private pendingItem: ItemId | null = null
+  private targetAxis: 0 | 1 | 2 = 0
+  private targetSize: 3 | 5 = 3
+  private pointerStart: { x: number; y: number } | null = null
 
   constructor(canvas: HTMLCanvasElement, config: GameConfig) {
     this.config = config
     this.seed = config.seed ?? Date.now() >>> 0
+    this.canvas = canvas
     this.view = new GameView(canvas, config)
     this.hud = new Hud()
     this.hud.setSeed(this.seed)
@@ -42,10 +49,17 @@ export class GameApp {
       hardDrop: () => this.game.hardDrop(),
       rotate: (axis, direction) => this.game.rotate(axis, direction),
       useItem: (slot) => this.useItem(slot),
+      targetOption: (option) => this.targetOption(option),
+      isTargeting: () => this.pendingItem !== null,
       escape: () => this.handleEscape(),
       dimension: () => this.game.dimension
     })
     this.input.attach()
+    this.hud.onItemClick((item) => this.beginTargeting(item))
+    canvas.addEventListener('pointerdown', this.onPointerDown)
+    canvas.addEventListener('pointermove', this.onPointerMove)
+    canvas.addEventListener('pointerup', this.onPointerUp)
+    canvas.addEventListener('pointerleave', this.onPointerLeave)
 
     document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.updateHint()
@@ -74,6 +88,10 @@ export class GameApp {
   dispose(): void {
     this.stop()
     this.input.detach()
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown)
+    this.canvas.removeEventListener('pointermove', this.onPointerMove)
+    this.canvas.removeEventListener('pointerup', this.onPointerUp)
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave)
     document.removeEventListener('visibilitychange', this.onVisibilityChange)
     this.view.dispose()
   }
@@ -88,17 +106,111 @@ export class GameApp {
     this.hud.setSeed(this.seed)
     this.hud.hideOverlay()
     this.gameOverShown = false
+    this.cancelTargeting(true)
     this.updateHint()
   }
 
   private useItem(slot: number): void {
-    const metaKeys = ['1', '2', '3', '4', '5', '6']
-    const name = ['TNT', '十字 TNT', '一字 TNT', '海绵', '排水桶', '墙壁炸弹'][slot - 1]
-    if (!name) return
-    this.hud.toast(`${metaKeys[slot - 1]} ${name} 将在后续里程碑开放`)
+    const item = ITEM_IDS[slot - 1]
+    if (item) this.beginTargeting(item)
+  }
+
+  private beginTargeting(item: ItemId): void {
+    if (this.game.status !== 'playing' || this.hud.overlayOpen) return
+    if (this.game.inventory[item] <= 0) {
+      this.hud.toast(`${ITEM_META[item].name} 数量不足`)
+      return
+    }
+    this.pendingItem = item
+    this.targetAxis = 0
+    this.targetSize = 3
+    this.canvas.style.cursor = 'crosshair'
+    this.hud.toast(ITEM_META[item].desc)
+    this.updateHint()
+  }
+
+  private targetOption(option: string): void {
+    if (!this.pendingItem) return
+    if (option === 'size3' || option === 'size5') {
+      if (this.pendingItem !== 'wallBomb') return
+      this.targetSize = option === 'size5' ? 5 : 3
+    } else if (option === 'x' || option === 'y' || option === 'z') {
+      if (this.pendingItem !== 'lineTnt') return
+      this.targetAxis = option === 'x' ? 0 : option === 'y' ? 1 : 2
+    } else {
+      return
+    }
+    this.updateHint()
+    this.hud.toast(this.targetHint())
+  }
+
+  private cancelTargeting(silent = false): void {
+    if (!this.pendingItem) return
+    this.pendingItem = null
+    this.pointerStart = null
+    this.highlightTarget(null)
+    this.canvas.style.cursor = ''
+    if (!silent) {
+      this.hud.toast('已取消道具瞄准')
+      this.updateHint()
+    }
+  }
+
+  private targetHint(): string {
+    const item = this.pendingItem
+    if (!item) return ''
+    if (item === 'lineTnt') return `瞄准目标后点击 · 方向 ${'XYZ'[this.targetAxis]}（X/Y/Z 切换）· Esc 取消`
+    if (item === 'wallBomb') return `瞄准框壁后点击 · 洞口 ${this.targetSize}³（3/5 切换）· Esc 取消`
+    return '点击方块/流体选择目标 · Esc 取消'
+  }
+
+  private highlightTarget(cell: Vec3 | null): void {
+    this.view.setHighlight(this.pendingItem ? cell : null)
+  }
+
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    if (!this.pendingItem) return
+    this.pointerStart = { x: event.clientX, y: event.clientY }
+  }
+
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    if (!this.pendingItem) return
+    this.highlightTarget(this.view.pickCell(event.clientX, event.clientY))
+  }
+
+  private readonly onPointerUp = (event: PointerEvent): void => {
+    const start = this.pointerStart
+    this.pointerStart = null
+    if (!this.pendingItem || !start) return
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return
+    const cell = this.view.pickCell(event.clientX, event.clientY)
+    if (!cell) {
+      this.hud.toast('没有选中有效目标')
+      return
+    }
+    const item = this.pendingItem
+    const ok = this.game.useItem(item, cell, {
+      axis: this.targetAxis,
+      size: this.targetSize
+    })
+    if (!ok) {
+      this.hud.toast('该位置无法使用道具')
+      return
+    }
+    this.hud.toast(`${ITEM_META[item].name} 已使用`)
+    this.cancelTargeting(true)
+    this.updateHint()
+  }
+
+  private readonly onPointerLeave = (): void => {
+    this.highlightTarget(null)
   }
 
   private handleEscape(): void {
+    if (this.pendingItem) {
+      this.cancelTargeting()
+      return
+    }
     if (this.hud.overlayOpen) {
       this.hud.handleEscape()
       return
@@ -144,6 +256,7 @@ export class GameApp {
   private showGameOverOverlay(): void {
     if (this.gameOverShown) return
     this.gameOverShown = true
+    this.cancelTargeting(true)
     const card = document.createElement('div')
     const title = document.createElement('h2')
     title.className = 'overlay-title'
@@ -175,6 +288,10 @@ export class GameApp {
   }
 
   private updateHint(): void {
+    if (this.pendingItem) {
+      this.hud.setHint(this.targetHint())
+      return
+    }
     const dimension = this.game.dimension
     const parts = ['←/→ 移动', 'Q/E 旋转', '空格硬降', 'Esc 暂停']
     if (dimension >= 3) parts.splice(1, 0, '↑/↓ 前后', 'R/F、T/G 其他轴')
@@ -194,7 +311,13 @@ export class GameApp {
           this.hud.toast(event.text)
           break
         case 'item':
-          this.hud.toast(`获得道具：${event.item}`)
+          this.hud.toast(`获得道具：${ITEM_META[event.item].name}`)
+          break
+        case 'event-start':
+          this.hud.showBanner(`事件 · ${EVENT_META[event.event].name}`, EVENT_META[event.event].desc, this.config.timing.bannerMs)
+          break
+        case 'event-end':
+          this.hud.toast(`事件结束：${EVENT_META[event.event].name}`)
           break
         case 'stage':
           this.updateHint()
@@ -233,6 +356,12 @@ export class GameApp {
     this.view.render()
 
     this.hud.sync(this.game)
+    this.hud.setActiveEvents(
+      this.game.eventSystem.list().map((event) => ({
+        label: EVENT_META[event.id].name,
+        remainingMs: event.remainingMs
+      }))
+    )
     this.measureFps(delta)
 
     this.rafId = requestAnimationFrame(this.loop)

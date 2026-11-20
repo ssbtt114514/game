@@ -130,6 +130,8 @@ export interface EventConfig {
   rainRatePerSec: number
   /** 锁定：塌方在框壁造成的缺口尺寸。 */
   collapseWallNotch: number
+  /** 雨天持续时间（需求未锁定，取 20 秒）。 */
+  rainDurationMs: number
 }
 
 export interface FluidConfig {
@@ -245,7 +247,8 @@ export const DEFAULT_CONFIG: GameConfig = {
     bombRainMinMs: 10000,
     bombRainMaxMs: 60000,
     rainRatePerSec: 0.2,
-    collapseWallNotch: 3
+    collapseWallNotch: 3,
+    rainDurationMs: 20000
   },
   fluids: {
     tickMs: 100,
