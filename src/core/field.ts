@@ -14,6 +14,9 @@ import { decodeBytes, decodeI8, decodeU16, decodeU32, encodeBytes, encodeI8, enc
 /** 面染色的空值。 */
 export const FACE_NONE = 7
 
+/** 六个面全部未染色时的打包值（每个面 3 bit）。 */
+export const NO_FACES = 0x3ffff
+
 export interface CellData {
   kind: CellKind
   color: number
@@ -62,7 +65,7 @@ export class Field {
     this.kind = new Uint8Array(total)
     this.color = new Int8Array(total).fill(-1)
     this.props = new Uint16Array(total)
-    this.faces = new Uint32Array(total)
+    this.faces = new Uint32Array(total).fill(NO_FACES)
   }
 
   get total(): number {
@@ -125,7 +128,7 @@ export class Field {
     this.kind[index] = CellKind.Empty
     this.color[index] = -1
     this.props[index] = 0
-    this.faces[index] = 0
+    this.faces[index] = NO_FACES
     this.fluidSet.delete(index)
     this.bombSet.delete(index)
     this.occupied--
@@ -148,11 +151,12 @@ export class Field {
 
   writeIndex(index: number, data: CellData): boolean {
     const previous = this.kind[index] as CellKind
+    const faces = data.faces === 0 ? NO_FACES : data.faces
     if (previous === data.kind) {
       // 允许同种类覆盖（例如染色），但仍需更新数据。
       this.color[index] = data.color
       this.props[index] = data.props
-      this.faces[index] = data.faces
+      this.faces[index] = faces
       if (data.kind === CellKind.Block) this.solidVersion++
       this.version++
       return true
@@ -165,7 +169,7 @@ export class Field {
     this.kind[index] = data.kind
     this.color[index] = data.color
     this.props[index] = data.props
-    this.faces[index] = data.faces
+    this.faces[index] = faces
     if (previous === CellKind.Block || data.kind === CellKind.Block) this.solidVersion++
     if (data.kind !== CellKind.Empty) {
       this.occupied++

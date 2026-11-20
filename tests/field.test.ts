@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Field, readFace, writeFace } from '../src/core/field'
+import { Field, NO_FACES, readFace, writeFace } from '../src/core/field'
 import { CellKind, PropFlag } from '../src/core/types'
 
 const dims = { w: 4, d: 2, h: 3 }
@@ -49,12 +49,12 @@ describe('Field', () => {
   })
 
   it('面染色读写', () => {
-    let packed = 0
+    let packed = NO_FACES
     packed = writeFace(packed, 0, 3)
     packed = writeFace(packed, 5, 5)
     expect(readFace(packed, 0)).toBe(3)
     expect(readFace(packed, 5)).toBe(5)
-    expect(readFace(packed, 2)).toBe(0)
+    expect(readFace(packed, 2)).toBe(7)
   })
 
   it('扩展场地保留既有方块', () => {
