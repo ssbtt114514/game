@@ -12,7 +12,7 @@ import { GameView } from './render/view'
 import { Hud } from './ui/hud'
 
 /** 当前里程碑已实现的最高阶段。 */
-const IMPLEMENTED_MAX_STAGE: StageId = 2
+const IMPLEMENTED_MAX_STAGE: StageId = 3
 
 export class GameApp {
   readonly config: GameConfig

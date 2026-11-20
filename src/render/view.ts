@@ -82,7 +82,7 @@ export class GameView {
   sync(game: GameState): void {
     const dims = game.field.dims
     if (dims.w !== this.dims.w || dims.d !== this.dims.d || dims.h !== this.dims.h) {
-      this.setDims(dims)
+      this.setDims(dims, true)
     }
     this.cells.sync(game)
   }
