@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "godot/**"
+      - ".github/actions/godot-android-export/**"
       - ".github/workflows/android.yml"
   pull_request:
     paths:
       - "godot/**"
+      - ".github/actions/godot-android-export/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
