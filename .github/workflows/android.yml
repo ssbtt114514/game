@@ -82,6 +82,11 @@ jobs:
           test -f godot/build/tetris-plus.apk
           sha256sum godot/build/tetris-plus.apk | tee godot/build/tetris-plus.apk.sha256
           ls -lh godot/build/tetris-plus.apk
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BUILD_TOOLS/apksigner" verify --verbose godot/build/tetris-plus.apk
+          if [ -x "$BUILD_TOOLS/aapt2" ]; then
+            "$BUILD_TOOLS/aapt2" dump badging godot/build/tetris-plus.apk | head -5
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
