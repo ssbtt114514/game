@@ -1346,7 +1346,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				target_axis = "y"
 			KEY_Z:
 				target_axis = "z"
-	if event is InputEventMouseButton:
+	var emulated_touch := OS.has_feature("mobile") or event.device == -1
+	if event is InputEventMouseButton and not emulated_touch:
 		var button: int = event.button_index
 		if event.pressed:
 			if button == MOUSE_BUTTON_WHEEL_UP:
@@ -1370,7 +1371,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif button == MOUSE_BUTTON_LEFT or button == MOUSE_BUTTON_RIGHT or button == MOUSE_BUTTON_MIDDLE:
 			_orbiting = false
 			_orbit_button = 0
-	if event is InputEventMouseMotion and _orbiting:
+	if event is InputEventMouseMotion and _orbiting and not emulated_touch:
 		if _orbit_button == MOUSE_BUTTON_MIDDLE:
 			_pan(event.relative.x, event.relative.y)
 		else:

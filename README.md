@@ -86,7 +86,7 @@ configs/             默认 / 极难 / 趣味自定义三份 JSON 预设
 | M7 | 难度、自定义界面、暂停、音效、存档、移动端 | 已完成 |
 | M8 | 全量测试与交付文档 | 已完成 |
 
-当前版本 1.2.0：网页版完成 M0–M8，另含 Godot Android / Windows / Web 移植。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
+当前版本 1.2.1：网页版完成 M0–M8，另含 Godot Android / Windows / Web 移植。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
 
 ### 触屏
 
@@ -94,7 +94,7 @@ configs/             默认 / 极难 / 趣味自定义三份 JSON 预设
 
 ## Godot Android 版
 
-`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 157 项、界面与存档冒烟测试 33 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
+`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 157 项、界面与存档冒烟测试 35 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
 
 ```bash
 # 启动 Godot 工程

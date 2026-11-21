@@ -100,5 +100,23 @@ func _run() -> void:
 	check(main.net_overlay.visible, "打开局域网页")
 	main._net_close_and_menu()
 	check(not main.net_overlay.visible and main.menu_overlay.visible, "局域网返回主页")
+	var start_btn: Button = null
+	for node in main.menu_overlay.find_children("*", "Button", true, false):
+		if (node as Button).text.begins_with("开始游戏"):
+			start_btn = node
+	check(start_btn != null, "主页存在开始按钮")
+	if start_btn != null:
+		var center := start_btn.get_global_rect().get_center()
+		var press := InputEventScreenTouch.new()
+		press.position = center
+		press.pressed = true
+		Input.parse_input_event(press)
+		await process_frame
+		var release := InputEventScreenTouch.new()
+		release.position = center
+		release.pressed = false
+		Input.parse_input_event(release)
+		await create_timer(0.2).timeout
+		check(main.started, "触摸点击开始按钮")
 	print("UI_SMOKE: failed=", failed)
 	quit(0 if failed == 0 else 1)

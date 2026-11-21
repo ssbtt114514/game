@@ -29,7 +29,7 @@ godot --headless --path godot -s res://tests/run_tests.gd
 xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -s res://tests/ui_smoke.gd
 ```
 
-当前规则测试 157 项通过，界面冒烟测试 33 项通过。
+当前规则测试 157 项通过，界面冒烟测试 35 项通过。
 
 ## Android 导出
 
