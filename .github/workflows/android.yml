@@ -108,7 +108,8 @@ jobs:
           path.write_text(text)
           PY
           grep -n "rendering_method" godot/project.godot
-          godot --headless --path godot --export-release Android godot/build/tetris-plus-gl.apk
+          mkdir -p godot/build
+          godot --headless --path godot --export-release Android build/tetris-plus-gl.apk
           test -f godot/build/tetris-plus-gl.apk
 
       - name: Split APKs by ABI
