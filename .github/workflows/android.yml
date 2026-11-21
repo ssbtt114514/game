@@ -69,6 +69,10 @@ jobs:
 
       - name: Export Android APK
         uses: ./.github/actions/godot-android-export
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/tetrisplus.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: tetrisplus
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: tetrisplus-ci
         with:
           godot-version: "4.3"
           working-directory: godot

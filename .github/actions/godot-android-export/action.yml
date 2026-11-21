@@ -97,7 +97,9 @@ runs:
           export/android/debug_keystore = "${{ github.action_path }}/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
-      run: echo $SETTINGS >> ~/.config/godot/editor_settings-4.tres
+      run: |
+        echo "$SETTINGS" >> ~/.config/godot/editor_settings-4.tres
+        echo "export/android/java_sdk_path = \"$JAVA_HOME\"" >> ~/.config/godot/editor_settings-4.tres
 
     - name: Install Android build template
       shell: bash
