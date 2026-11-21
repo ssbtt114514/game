@@ -1,10 +1,11 @@
 # 俄罗斯方块 Plus
 
 ![CI](https://github.com/ssbtt114514/game/actions/workflows/ci.yml/badge.svg?branch=main)
+![Android APK](https://github.com/ssbtt114514/game/actions/workflows/android.yml/badge.svg?branch=main)
 
 经典俄罗斯方块的进化版：随着累计分数提升，从一维线段、二维经典、三维立体，逐步解锁颜色系统、流体系统、道具、方块属性与随机事件。
 
-技术栈：TypeScript + Three.js + Vite，逻辑层与渲染层严格分离，核心规则可在 Node 环境独立单测。
+技术栈：TypeScript + Three.js + Vite（网页版）与 Godot 4.3 + GDScript（Android 版）。逻辑层与渲染层严格分离，核心规则可在 Node 与 Godot 无头环境独立测试。
 
 ## 安装与运行
 
@@ -85,11 +86,25 @@ configs/             默认 / 极难 / 趣味自定义三份 JSON 预设
 | M7 | 难度、自定义界面、暂停、音效、存档、移动端 | 已完成 |
 | M8 | 全量测试与交付文档 | 已完成 |
 
-当前版本 1.0.0 完成 M0–M8。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
+当前版本 1.1.0：网页版完成 M0–M8，另含 Godot Android 移植。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
 
 ### 触屏
 
 窄屏或触摸设备底部显示操作区：←/→ 移动，前/后 调深度，↺/↻ 旋转，软降、硬降、暂停，以及六种道具按钮；点击道具后在画面上点选目标。
+
+## Godot Android 版
+
+`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 144 项、界面与存档冒烟测试 19 项通过；详情见 `godot/README.md`。
+
+```bash
+# 启动 Godot 工程
+godot --path godot --editor
+
+# 无头规则测试
+godot --headless --path godot -s res://tests/run_tests.gd
+```
+
+推送 `godot/` 变更后，`Android APK` 工作流会构建 `godot/build/tetris-plus.apk` 并上传 artifact。
 
 ## 配置预设
 

@@ -1,0 +1,88 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "godot/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "godot/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - name: Create signing keystore and export credentials
+        env:
+          KEYSTORE_PASS: tetrisplus-ci
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/tetrisplus.keystore" \
+            -alias tetrisplus \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS" \
+            -dname "CN=Tetris Plus,O=MonkeyCode,C=CN"
+          mkdir -p godot/.godot godot/build
+          cat > godot/.godot/export_credentials.cfg <<CREDS
+          [preset.0]
+
+          script_encryption_key=""
+
+          [preset.0.options]
+
+          keystore/debug="$GITHUB_WORKSPACE/tetrisplus.keystore"
+          keystore/debug_user="tetrisplus"
+          keystore/debug_password="$KEYSTORE_PASS"
+          keystore/release="$GITHUB_WORKSPACE/tetrisplus.keystore"
+          keystore/release_user="tetrisplus"
+          keystore/release_password="$KEYSTORE_PASS"
+          CREDS
+
+      - name: Export Android APK
+        uses: dulvui/godot-android-export@v4.2.0
+        with:
+          godot-version: "4.3"
+          working-directory: godot
+
+      - name: Verify APK
+        run: |
+          test -f godot/build/tetris-plus.apk
+          sha256sum godot/build/tetris-plus.apk | tee godot/build/tetris-plus.apk.sha256
+          ls -lh godot/build/tetris-plus.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tetris-plus-android
+          path: |
+            godot/build/tetris-plus.apk
+            godot/build/tetris-plus.apk.sha256
+          retention-days: 30
+          if-no-files-found: error
