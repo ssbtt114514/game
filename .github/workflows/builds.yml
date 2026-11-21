@@ -32,12 +32,12 @@ jobs:
             preset: "Windows Desktop"
             output: "build/windows/tetris-plus.exe"
             artifact: tetris-plus-windows
-            package: true
+            upload_path: godot/build/windows
           - label: Web
             preset: "Web"
             output: "build/web/index.html"
             artifact: tetris-plus-web
-            package: false
+            upload_path: godot/build/web
     steps:
       - uses: actions/checkout@v4
 
@@ -71,25 +71,9 @@ jobs:
           /tmp/godot/Godot_v${GODOT_VERSION}_linux.x86_64 --headless --path godot --export-release "${{ matrix.preset }}" "${{ matrix.output }}"
           ls -lh "godot/$(dirname "${{ matrix.output }}")"
 
-      - name: Package Windows
-        if: matrix.package
-        run: |
-          cd godot/build/windows
-          zip -q -r "$GITHUB_WORKSPACE/tetris-plus-windows.zip" .
-          ls -lh "$GITHUB_WORKSPACE/tetris-plus-windows.zip"
-
-      - name: Upload Windows
-        if: matrix.package
+      - name: Upload ${{ matrix.label }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: tetris-plus-windows.zip
-          if-no-files-found: error
-
-      - name: Upload Web
-        if: ${{ !matrix.package }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: godot/build/web
+          path: ${{ matrix.upload_path }}
           if-no-files-found: error
