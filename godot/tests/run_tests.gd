@@ -24,6 +24,7 @@ func _init() -> void:
 	_test_field()
 	_test_pieces()
 	_test_clears()
+	_test_lock_clear()
 	_test_fluid()
 	_test_game()
 	_test_save()
@@ -93,6 +94,10 @@ func _test_clears() -> void:
 		f1.set_cell(0, 0, z, TpConfig.KIND_BLOCK, 0, 0)
 	var o1 := TpClear.detect(f1, 1)
 	check(int(o1["points"]) == 20 and int(o1["lines"]) == 1 and o1["cells"].size() == 12, "阶段一整列 +20")
+	var f1r := TpField.new(Vector3i(6, 1, 12))
+	make_row(f1r, 0, 0)
+	var o1r := TpClear.detect(f1r, 1)
+	check(int(o1r["points"]) == 20 and o1r["cells"].size() == 6, "阶段一整行 +20")
 	var f2 := TpField.new(Vector3i(10, 1, 20))
 	make_row(f2, 0, 0)
 	var o2 := TpClear.detect(f2, 2)
@@ -113,6 +118,48 @@ func _test_clears() -> void:
 			f5.set_cell(x, y, 0, TpConfig.KIND_BLOCK, (x + y) % 5, 0)
 	var o5 := TpClear.detect(f5, 4)
 	check(int(o5["color_clears"]) == 0, "五色层不消除")
+
+func _test_lock_clear() -> void:
+	var g1 := TpGame.new(3, "normal")
+	g1.active = {}
+	for z in 11:
+		g1.field.set_cell(0, 0, z, TpConfig.KIND_BLOCK, 0, 0)
+	g1.active = {
+		"id": "probe", "cells": [Vector3i.ZERO], "pos": Vector3i(0, 0, 11),
+		"kinds": [TpConfig.KIND_BLOCK], "colors": [0], "props": [0],
+	}
+	g1.lock_piece()
+	check(g1.score == 20, "实机锁定整列得分")
+	check(g1.field.kind_at(0, 0, 0) == 0 and g1.field.kind_at(0, 0, 11) == 0, "实机锁定整列清除")
+	check(not g1.active.is_empty(), "消除后生成下一块")
+
+	var g2 := TpGame.new(4, "normal")
+	g2.add_score(100)
+	g2.active = {}
+	for x in 9:
+		g2.field.set_cell(x, 0, 0, TpConfig.KIND_BLOCK, 0, 0)
+	g2.active = {
+		"id": "probe", "cells": [Vector3i.ZERO], "pos": Vector3i(9, 0, 0),
+		"kinds": [TpConfig.KIND_BLOCK], "colors": [0], "props": [0],
+	}
+	g2.lock_piece()
+	check(g2.score == 150, "实机锁定整行得分")
+	check(g2.field.kind_at(0, 0, 0) == 0 and g2.field.kind_at(9, 0, 0) == 0, "实机锁定整行清除")
+
+	var g3 := TpGame.new(5, "normal")
+	g3.add_score(800)
+	g3.active = {}
+	for y in 10:
+		for x in 10:
+			if x != 5 or y != 5:
+				g3.field.set_cell(x, y, 0, TpConfig.KIND_BLOCK, 0, 0)
+	g3.active = {
+		"id": "probe", "cells": [Vector3i.ZERO], "pos": Vector3i(5, 5, 0),
+		"kinds": [TpConfig.KIND_BLOCK], "colors": [0], "props": [0],
+	}
+	g3.lock_piece()
+	check(g3.score == 1300, "实机锁定整层得分")
+	check(g3.field.kind_at(0, 0, 0) == 0 and g3.field.kind_at(9, 9, 0) == 0, "实机锁定整层清除")
 
 func _test_fluid() -> void:
 	var f := TpField.new(Vector3i(3, 1, 4))

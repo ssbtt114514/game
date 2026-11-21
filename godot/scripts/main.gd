@@ -35,18 +35,21 @@ var target_size := 3
 var solid_mm: MultiMesh
 var active_mm: MultiMesh
 var ghost_mm: MultiMesh
+var flash_mm: MultiMesh
 var grid_mesh: MeshInstance3D
 var camera: Camera3D
 var next_preview: NextPreview
 var _last_version := -1
 var _banner_time := 0.0
 var _toast_time := 0.0
+var _flash_time := 0.0
 
 var score_label: Label
 var stage_label: Label
 var difficulty_label: Label
 var event_label: Label
 var seed_label: Label
+var goal_label: Label
 var banner_label: Label
 var toast_label: Label
 var touch_root: Control
@@ -106,8 +109,26 @@ func _build_world() -> void:
 	solid_mm = _make_multimesh(false)
 	active_mm = _make_multimesh(false)
 	ghost_mm = _make_multimesh(true)
+	flash_mm = _make_flash_multimesh()
 	grid_mesh = MeshInstance3D.new()
 	add_child(grid_mesh)
+
+func _make_flash_multimesh() -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var box := BoxMesh.new()
+	box.size = Vector3(1.04, 1.04, 1.04)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	box.material = mat
+	mm.mesh = box
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	add_child(mmi)
+	return mm
 
 func _make_multimesh(ghost: bool) -> MultiMesh:
 	var mm := MultiMesh.new()
@@ -226,6 +247,10 @@ func _process(delta: float) -> void:
 		_rebuild_field()
 	_rebuild_active()
 	_update_hud(delta)
+	if _flash_time > 0.0:
+		_flash_time -= delta
+		if _flash_time <= 0.0:
+			flash_mm.instance_count = 0
 
 func _handle_event(event: Dictionary) -> void:
 	match str(event.get("type", "")):
@@ -238,7 +263,9 @@ func _handle_event(event: Dictionary) -> void:
 			_show_banner(str(event.get("title", "")), str(event.get("sub", "")))
 		"clear":
 			var points := int(event.get("points", 0))
-			_show_toast("消除 +%d" % points)
+			var removed := int(event.get("removed", 0))
+			_show_toast("消除 %d 格  +%d" % [removed, points])
+			_flash_cleared(event.get("cells", []))
 		"item":
 			_show_toast("获得道具：%s" % TpConfig.ITEM_NAMES.get(str(event.get("item", "")), "?"))
 			_next_preview()
@@ -254,6 +281,15 @@ func _handle_event(event: Dictionary) -> void:
 			_show_gameover()
 		"pause":
 			pass
+
+func _flash_cleared(cells: Array) -> void:
+	flash_mm.instance_count = cells.size()
+	for i in cells.size():
+		var c: Dictionary = cells[i]
+		var pos := _world_pos(int(c["x"]), int(c["y"]), int(c["z"]))
+		flash_mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, pos))
+		flash_mm.set_instance_color(i, TpConfig.color_of(int(c["color"])).lightened(0.65))
+	_flash_time = 0.18
 
 func _event_name(id: String) -> String:
 	match id:
@@ -272,6 +308,7 @@ func _update_hud(delta: float) -> void:
 		return
 	score_label.text = "分数  %d" % game.score
 	stage_label.text = "阶段  %s" % TpConfig.STAGE_NAMES[game.stage - 1]
+	goal_label.text = "目标  " + TpConfig.STAGE_GOALS[clampi(game.stage - 1, 0, TpConfig.STAGE_GOALS.size() - 1)]
 	difficulty_label.text = "难度  %s" % str(game.difficulty()["label"])
 	seed_label.text = "种子 %d" % game.seed_value
 	var parts := []
@@ -357,6 +394,11 @@ func _build_ui() -> void:
 	top.add_child(difficulty_label)
 	top.add_child(event_label)
 	top.add_child(seed_label)
+
+	goal_label = _label("目标  填满整行（6 格）或整列（12 格）", 15, Color("ffe14d"))
+	goal_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	goal_label.position = Vector2(16, 70)
+	root.add_child(goal_label)
 
 	var preview_panel := PanelContainer.new()
 	preview_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.04, 0.08, 0.15, 0.78)))

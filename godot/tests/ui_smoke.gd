@@ -58,7 +58,21 @@ func _run() -> void:
 	check(main.started, "读取存档")
 	check(main.game.stage == 5, "读档保持阶段五")
 	check(main.game.score >= 50000, "读档保持分数")
+	main.custom_check.button_pressed = false
 	main._start_from_menu()
+	await process_frame
+	check(main.game.field.dims == Vector3i(6, 1, 12), "默认阶段一场地")
+	check(main.goal_label.text.contains("整行"), "阶段一目标提示")
+	for x in 5:
+		main.game.field.set_cell(x, 0, 0, TpConfig.KIND_BLOCK, 0, 0)
+	main.game.active = {
+		"id": "probe", "cells": [Vector3i.ZERO], "pos": Vector3i(5, 0, 0),
+		"kinds": [TpConfig.KIND_BLOCK], "colors": [0], "props": [0],
+	}
+	main.game.lock_piece()
+	await process_frame
+	check(main.flash_mm.instance_count == 6, "消除闪光渲染")
+	check(main.game.score == 20, "界面实机消除计分")
 	main.game.add_score(50000)
 	await create_timer(0.3).timeout
 	var img := root.get_texture().get_image()

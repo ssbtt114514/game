@@ -10,6 +10,13 @@ const STAGE_DIMS := [
 	Vector3i(10, 10, 20),
 ]
 const STAGE_NAMES := ["一", "二", "三", "四", "五"]
+const STAGE_GOALS := [
+	"填满整行（6 格）或整列（12 格）",
+	"填满整行（10 格）",
+	"填满整层 / 整排 / 整列",
+	"消除颜色种类不超过 4 的整层 / 整排 / 整列",
+	"颜色消除 + 六面异色魔方",
+]
 const COLORS := [
 	Color("f2f5fa"),
 	Color("ffe14d"),

@@ -299,9 +299,15 @@ func _resolve_board() -> void:
 	if cells.is_empty():
 		return
 	var removed := 0
+	var cleared := []
 	for i in cells:
 		if field.kind[i] != 0:
 			removed += 1
+			var cell := field.cell_from_index(i)
+			cleared.append({
+				"x": cell.x, "y": cell.y, "z": cell.z,
+				"color": int(field.color[i]),
+			})
 			field.clear_cell_by_index(i)
 	add_score(int(outcome["points"]))
 	add_event("clear", {
@@ -309,6 +315,7 @@ func _resolve_board() -> void:
 		"lines": int(outcome["lines"]),
 		"layers": int(outcome["layers"]) + int(outcome["cube_layers"]),
 		"removed": removed,
+		"cells": cleared,
 	})
 	_roll_item_drop()
 

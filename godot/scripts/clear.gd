@@ -78,6 +78,12 @@ static func detect(field: TpField, stage: int) -> Dictionary:
 
 static func _detect_stage1(field: TpField, out: Dictionary) -> void:
 	for y in field.dims.y:
+		for z in field.dims.z:
+			var row := row_indices(field, z, y)
+			if all_occupied(field, row):
+				add_cells(out["cells"], row)
+				out["lines"] += 1
+				out["points"] += TpConfig.SCORE_COLUMN
 		for x in field.dims.x:
 			var indices := []
 			var full := true
