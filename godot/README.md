@@ -1,6 +1,6 @@
 # 俄罗斯方块 Plus · Godot 版
 
-这是网页版规则的 Godot 4.3 / GDScript 实现，目标平台为 Android。项目完全使用 GDScript 与程序化生成的 3D 场景，不依赖外部美术或音频素材。
+这是网页版规则的 Godot 4.3 / GDScript 实现，目标平台为 Android、Windows 与 Web。项目完全使用 GDScript 与程序化生成的 3D 场景，不依赖外部美术或音频素材。
 
 ## 本地运行
 
@@ -29,7 +29,7 @@ godot --headless --path godot -s res://tests/run_tests.gd
 xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -s res://tests/ui_smoke.gd
 ```
 
-当前规则测试 152 项通过，界面冒烟测试 23 项通过。
+当前规则测试 157 项通过，界面冒烟测试 33 项通过。
 
 ## Android 导出
 
@@ -44,11 +44,22 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 包名：`com.monkeycode.tetrisplus`，版本名 `1.0.0`，目标架构 `arm64-v8a`，横屏沉浸式。
 
+## 模式
+
+- 开始游戏：按分数从阶段一进化到阶段五。
+- 无尽模式：固定阶段五场地与规则，无限挑战。
+- 局域网合作：同一局域网两人共用一块场地；主机创建房间，客户端填写主机 IP 与端口加入，双方可同时操作当前方块。
+
 ## 操作
 
-- 键盘：←/→ 移动，↑/↓ 前后，Shift 软降，空格硬降，Q/E、R/F、T/G 三轴旋转，1–6 道具，Esc 暂停。
-- 触屏：底部提供移动、前后、三轴旋转、软降、硬降、暂停与六种道具按钮。
+- 键盘：←/→ 移动，↑/↓ 前后，Shift 软降，空格硬降，Q/E、R/F、T/G 三轴旋转，1–6 道具，Esc 暂停，Home 重置视角。
+- 视角：拖动画面旋转，滚轮缩放，中键拖动平移。
+- 触屏：底部提供移动、前后、三轴旋转、软降、硬降、暂停与六种道具按钮；右侧提供缩放与视角重置。
 - 道具选中后点击/触摸画面选取目标；一字 TNT 与墙壁炸弹用 X/Y/Z 与 3/5 调整。
+
+## Windows / Web 导出
+
+`export_presets.cfg` 包含 `Windows Desktop`（`build/windows/tetris-plus.exe`）与 `Web`（`build/web/index.html`）预设。`.github/workflows/builds.yml` 下载 Godot 4.3 导出模板后分别构建并上传 `tetris-plus-windows` 与 `tetris-plus-web` artifact。Web 版本关闭线程支持，可直接由静态服务器托管。
 
 ## 结构
 

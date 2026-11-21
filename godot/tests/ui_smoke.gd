@@ -77,5 +77,28 @@ func _run() -> void:
 	await create_timer(0.3).timeout
 	var img := root.get_texture().get_image()
 	img.save_png("/tmp/godot-stage5.png")
+	main._show_menu()
+	check(main.menu_overlay.visible, "返回主页")
+	main._open_settings()
+	check(main.settings_overlay.visible and not main.menu_overlay.visible, "打开设置页")
+	main._close_settings()
+	check(main.menu_overlay.visible, "设置返回主页")
+	main._start_endless()
+	await process_frame
+	check(main.game.endless and main.game.stage == 5, "无尽模式固定阶段五")
+	check(main.game.field.dims == Vector3i(10, 10, 20), "无尽模式阶段五场地")
+	var cam_before: Vector3 = main.camera.position
+	main._orbit(60, 20)
+	check(main.camera.position.distance_to(cam_before) > 0.1, "拖动旋转视角")
+	var dist_before: float = main.cam_dist
+	main._zoom(0.8)
+	check(main.cam_dist < dist_before, "缩放视角")
+	main._reset_view()
+	check(main.cam_dist > 0.0, "重置视角")
+	main._show_menu()
+	main._open_net()
+	check(main.net_overlay.visible, "打开局域网页")
+	main._net_close_and_menu()
+	check(not main.net_overlay.visible and main.menu_overlay.visible, "局域网返回主页")
 	print("UI_SMOKE: failed=", failed)
 	quit(0 if failed == 0 else 1)

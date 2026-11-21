@@ -25,6 +25,7 @@ func _init() -> void:
 	_test_pieces()
 	_test_clears()
 	_test_lock_clear()
+	_test_endless()
 	_test_fluid()
 	_test_game()
 	_test_save()
@@ -160,6 +161,17 @@ func _test_lock_clear() -> void:
 	g3.lock_piece()
 	check(g3.score == 1300, "实机锁定整层得分")
 	check(g3.field.kind_at(0, 0, 0) == 0 and g3.field.kind_at(9, 9, 0) == 0, "实机锁定整层清除")
+
+func _test_endless() -> void:
+	var g := TpGame.new(9, "normal", {"endless": true})
+	check(g.stage == 5, "无尽模式固定阶段五")
+	check(g.field.dims == Vector3i(10, 10, 20), "无尽模式阶段五场地")
+	g.add_score(50000)
+	check(g.stage == 5, "无尽模式不跳阶段")
+	check(g.field.dims == Vector3i(10, 10, 20), "无尽模式场地不重置")
+	var restored := TpGame.new(1, "normal")
+	restored.restore_save(g.capture_save())
+	check(restored.endless and restored.stage == 5, "无尽模式存档往返")
 
 func _test_fluid() -> void:
 	var f := TpField.new(Vector3i(3, 1, 4))

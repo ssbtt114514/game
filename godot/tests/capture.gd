@@ -10,7 +10,12 @@ func _init() -> void:
 func _capture() -> void:
 	await create_timer(1.2).timeout
 	var img := root.get_texture().get_image()
-	img.save_png("/tmp/godot-menu.png")
+	img.save_png("/tmp/godot-home.png")
+	main._open_settings()
+	await create_timer(0.4).timeout
+	img = root.get_texture().get_image()
+	img.save_png("/tmp/godot-settings.png")
+	main._close_settings()
 	main._start_from_menu()
 	await create_timer(0.8).timeout
 	for i in 4:

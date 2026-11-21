@@ -9,6 +9,7 @@ var custom_dims := Vector3i.ZERO
 var custom_dimension := 0
 var speed_multiplier := 1.0
 var max_stage := 5
+var endless := false
 var seed_value := 1
 
 var field: TpField
@@ -38,6 +39,7 @@ func _init(seed_val: int = 1, difficulty: String = "normal", options: Dictionary
 	custom_dims = options.get("dims", Vector3i.ZERO)
 	custom_dimension = int(options.get("dimension", 0))
 	max_stage = int(options.get("max_stage", 5))
+	endless = bool(options.get("endless", false))
 	var base_speed: float = TpConfig.difficulty(difficulty_id)["speed"]
 	speed_multiplier = base_speed * float(options.get("speed_multiplier", 1.0))
 	for id in TpConfig.ITEM_IDS:
@@ -61,10 +63,10 @@ func dims_for_stage(s: int) -> Vector3i:
 	return TpConfig.STAGE_DIMS[clampi(s - 1, 0, TpConfig.STAGE_DIMS.size() - 1)]
 
 func start_new_game() -> void:
-	field = TpField.new(dims_for_stage(1))
 	rng = TpRng.new(seed_value)
 	score = 0
-	stage = 1
+	stage = 5 if endless else 1
+	field = TpField.new(dims_for_stage(stage))
 	time_ms = 0.0
 	status = "playing"
 	active = {}
@@ -211,6 +213,8 @@ func add_score(points: int) -> void:
 	_refresh_stage()
 
 func _refresh_stage() -> void:
+	if endless:
+		return
 	var target := TpConfig.stage_for_score(score)
 	if target <= stage:
 		return
@@ -586,6 +590,8 @@ func capture_save() -> Dictionary:
 		"seed": seed_value,
 		"difficulty": difficulty_id,
 		"stage": stage,
+		"endless": endless,
+		"status": status,
 		"score": score,
 		"time_ms": time_ms,
 		"inventory": inventory.duplicate(),
@@ -604,6 +610,7 @@ func restore_save(data: Dictionary) -> bool:
 	field = TpField.deserialize(data.get("field", {}))
 	score = int(data.get("score", 0))
 	stage = int(data.get("stage", 1))
+	endless = bool(data.get("endless", false))
 	time_ms = float(data.get("time_ms", 0.0))
 	inventory = data.get("inventory", inventory).duplicate()
 	rng.set_state(int(data.get("rng", rng.get_state())))
@@ -612,7 +619,7 @@ func restore_save(data: Dictionary) -> bool:
 		next_queue.append(_piece_from_data(piece))
 	active = _piece_from_data(data.get("active", null))
 	active_events = data.get("events", {}).duplicate()
-	status = "playing"
+	status = str(data.get("status", "playing"))
 	gravity_timer = 0.0
 	lock_timer = 0.0
 	grounded = false

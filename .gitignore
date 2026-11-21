@@ -8,3 +8,5 @@ godot/.godot
 godot/build/*.apk
 godot/build/*.sha256
 godot/android
+godot/build/windows
+godot/build/web

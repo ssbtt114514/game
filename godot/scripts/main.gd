@@ -28,9 +28,21 @@ var game: TpGame
 var settings: Dictionary
 var options: Dictionary = {}
 var started := false
+var game_mode := "normal"
+var net_role := "off"
+var net_status := "未连接"
+var net_peer: ENetMultiplayerPeer
+var _net_sync := 0.0
 var pending_item := ""
 var target_axis := "z"
 var target_size := 3
+
+var cam_target := Vector3.ZERO
+var cam_yaw := 0.62
+var cam_pitch := 0.42
+var cam_dist := 30.0
+var _orbit_button := 0
+var _orbiting := false
 
 var solid_mm: MultiMesh
 var active_mm: MultiMesh
@@ -55,8 +67,15 @@ var toast_label: Label
 var touch_root: Control
 var item_buttons := {}
 var menu_overlay: Control
+var settings_overlay: Control
+var net_overlay: Control
 var pause_overlay: Control
 var over_overlay: Control
+var net_status_label: Label
+var net_ip_input: LineEdit
+var net_port_input: SpinBox
+var net_host_button: Button
+var net_join_button: Button
 var diff_select: OptionButton
 var custom_check: CheckBox
 var custom_box: VBoxContainer
@@ -77,6 +96,11 @@ func _ready() -> void:
 	_reframe()
 	_rebuild_field()
 	_show_menu()
+	multiplayer.peer_connected.connect(_on_peer_connected)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.connection_failed.connect(_on_connection_failed)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	set_process(true)
 
 func _build_world() -> void:
@@ -156,13 +180,50 @@ func _world_pos(x: int, y: int, z: int) -> Vector3:
 	return Vector3(x - dims.x * 0.5 + 0.5, z + 0.5, y - dims.y * 0.5 + 0.5)
 
 func _reframe() -> void:
-	if game == null:
+	_fit_camera(true)
+
+func _fit_camera(reset_angles: bool) -> void:
+	if game == null or camera == null:
 		return
 	var dims := game.field.dims
-	var center := Vector3(0, dims.z * 0.45, 0)
-	camera.position = Vector3(dims.x * 0.75 + 5.0, dims.z * 0.95 + 3.0, maxf(dims.x, dims.y) * 1.45 + 12.0)
-	camera.look_at(center)
+	cam_target = Vector3(0, dims.z * 0.45, 0)
+	cam_dist = maxf(dims.x, dims.y) * 1.25 + dims.z * 0.85 + 8.0
+	if reset_angles:
+		cam_yaw = 0.62
+		cam_pitch = 0.42
+	_apply_camera()
 	_rebuild_grid()
+
+func _apply_camera() -> void:
+	if camera == null:
+		return
+	var offset := Vector3(
+		sin(cam_yaw) * cos(cam_pitch),
+		sin(cam_pitch),
+		cos(cam_yaw) * cos(cam_pitch)
+	) * cam_dist
+	camera.position = cam_target + offset
+	camera.look_at(cam_target, Vector3.UP)
+
+func _orbit(dx: float, dy: float) -> void:
+	cam_yaw -= dx * 0.006
+	cam_pitch = clampf(cam_pitch + dy * 0.006, -1.35, 1.35)
+	_apply_camera()
+
+func _pan(dx: float, dy: float) -> void:
+	if camera == null:
+		return
+	var basis := camera.global_transform.basis
+	cam_target += (-basis.x * dx + basis.y * dy) * cam_dist * 0.0016
+	_apply_camera()
+
+func _zoom(factor: float) -> void:
+	cam_dist = clampf(cam_dist * factor, 4.0, 260.0)
+	_apply_camera()
+
+func _reset_view() -> void:
+	_reframe()
+	_show_toast("视角已重置")
 
 func _rebuild_grid() -> void:
 	var dims := game.field.dims
@@ -239,10 +300,15 @@ func _rebuild_active() -> void:
 func _process(delta: float) -> void:
 	if game == null:
 		return
-	if started:
+	if started and net_role != "client":
 		game.tick(delta * 1000.0)
 		for event in game.drain_events():
 			_handle_event(event)
+	if net_role == "host" and started:
+		_net_sync += delta
+		if _net_sync >= 0.35:
+			_net_sync = 0.0
+			_broadcast_state()
 	if game.field.version != _last_version:
 		_rebuild_field()
 	_rebuild_active()
@@ -256,8 +322,11 @@ func _handle_event(event: Dictionary) -> void:
 	match str(event.get("type", "")):
 		"spawn":
 			next_preview.set_piece(game.next_queue[0] if not game.next_queue.is_empty() else {})
-		"stage", "resize":
-			_reframe()
+		"stage":
+			_fit_camera(false)
+			_next_preview()
+		"resize":
+			_rebuild_grid()
 			_next_preview()
 		"banner":
 			_show_banner(str(event.get("title", "")), str(event.get("sub", "")))
@@ -307,7 +376,10 @@ func _update_hud(delta: float) -> void:
 	if score_label == null:
 		return
 	score_label.text = "分数  %d" % game.score
-	stage_label.text = "阶段  %s" % TpConfig.STAGE_NAMES[game.stage - 1]
+	if game.endless:
+		stage_label.text = "无尽  阶段五"
+	else:
+		stage_label.text = "阶段  %s" % TpConfig.STAGE_NAMES[game.stage - 1]
 	goal_label.text = "目标  " + TpConfig.STAGE_GOALS[clampi(game.stage - 1, 0, TpConfig.STAGE_GOALS.size() - 1)]
 	difficulty_label.text = "难度  %s" % str(game.difficulty()["label"])
 	seed_label.text = "种子 %d" % game.seed_value
@@ -431,6 +503,8 @@ func _build_ui() -> void:
 
 	_build_touch(root)
 	_build_menu(root)
+	_build_settings(root)
+	_build_net(root)
 	_build_pause(root)
 	_build_gameover(root)
 
@@ -479,6 +553,24 @@ func _build_touch(root: Control) -> void:
 		b.pressed.connect(spec[1])
 		pad.add_child(b)
 
+	var view_col := VBoxContainer.new()
+	view_col.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	view_col.offset_left = -62
+	view_col.offset_right = -8
+	view_col.offset_top = -86
+	view_col.offset_bottom = 86
+	view_col.add_theme_constant_override("separation", 6)
+	touch_root.add_child(view_col)
+	var zoom_in := _button("＋", Vector2(54, 50), 22)
+	zoom_in.pressed.connect(_zoom.bind(0.82))
+	view_col.add_child(zoom_in)
+	var zoom_out := _button("－", Vector2(54, 50), 22)
+	zoom_out.pressed.connect(_zoom.bind(1.22))
+	view_col.add_child(zoom_out)
+	var reset_view := _button("视角", Vector2(54, 46), 14)
+	reset_view.pressed.connect(_reset_view)
+	view_col.add_child(reset_view)
+
 func _button(text: String, minimum: Vector2, font_size: int = 16) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -522,15 +614,56 @@ func _dialog(width: float, height: float) -> Array:
 	return [overlay, box]
 
 func _build_menu(root: Control) -> void:
-	var parts := _dialog(560, 620)
+	var parts := _dialog(560, 630)
 	menu_overlay = parts[0]
 	var box: VBoxContainer = parts[1]
-	var title := _label("俄罗斯方块 Plus", 34)
+	box.add_theme_constant_override("separation", 10)
+	var title := _label("俄罗斯方块 Plus", 42, Color("eaf3ff"))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
-	var sub := _label("一维 → 二维 → 三维 → 颜色 → 流体：随分数进化", 14, Color("9fb8de"))
+	var sub := _label("一维 → 二维 → 三维 → 颜色 → 流体", 15, Color("8fb6e8"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
+	var hint := _label("拖动画面旋转视角 · 滚轮或双指缩放", 12, Color("6b7c99"))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(hint)
+
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 8)
+	box.add_child(gap)
+
+	var start := _button("开始游戏", Vector2(0, 54), 21)
+	start.pressed.connect(_start_from_menu)
+	box.add_child(start)
+
+	var endless := _button("无尽模式  ·  固定阶段五无限挑战", Vector2(0, 48), 17)
+	endless.pressed.connect(_start_endless)
+	box.add_child(endless)
+
+	var coop := _button("局域网合作  ·  双人共用一块场地", Vector2(0, 48), 17)
+	coop.pressed.connect(_open_net)
+	box.add_child(coop)
+
+	var settings_btn := _button("设置", Vector2(0, 44), 16)
+	settings_btn.pressed.connect(_open_settings)
+	box.add_child(settings_btn)
+
+	continue_button = _button("读取存档", Vector2(0, 44), 16)
+	continue_button.pressed.connect(_continue_game)
+	continue_button.disabled = not TpGame.has_save()
+	box.add_child(continue_button)
+
+	var footer := _label("Esc 暂停 · 空格硬降 · 1–6 道具 · 更多按键见设置", 12, Color("6b7c99"))
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(footer)
+
+func _build_settings(root: Control) -> void:
+	var parts := _dialog(560, 660)
+	settings_overlay = parts[0]
+	var box: VBoxContainer = parts[1]
+	var title := _label("设置", 32)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
 
 	var diff_row := HBoxContainer.new()
 	diff_row.add_child(_label("难度", 15, Color("9fb8de")))
@@ -597,17 +730,64 @@ func _build_menu(root: Control) -> void:
 	mute_check.button_pressed = bool(settings["muted"])
 	box.add_child(mute_check)
 
-	var start := _button("开始游戏", Vector2(0, 52), 20)
-	start.pressed.connect(_start_from_menu)
-	box.add_child(start)
-	continue_button = _button("读取存档", Vector2(0, 46), 17)
-	continue_button.pressed.connect(_continue_game)
-	continue_button.disabled = not TpGame.has_save()
-	box.add_child(continue_button)
+	var reset := _button("重置视角", Vector2(0, 42), 16)
+	reset.pressed.connect(_reset_view)
+	box.add_child(reset)
 
-	var footer := _label("Esc 暂停 · 1–6 道具 · 触摸设备显示操作按钮", 12, Color("6b7c99"))
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(footer)
+	var rules := _label("键盘：←/→ 移动 · ↑/↓ 前后 · Shift 软降 · 空格硬降
+Q/E、R/F、T/G 三轴旋转 · 1–6 道具 · X/Y/Z 与 3/5 调整道具", 12, Color("6b7c99"))
+	rules.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(rules)
+
+	var back := _button("返回主页", Vector2(0, 46), 17)
+	back.pressed.connect(_close_settings)
+	box.add_child(back)
+	settings_overlay.visible = false
+
+func _build_net(root: Control) -> void:
+	var parts := _dialog(540, 500)
+	net_overlay = parts[0]
+	var box: VBoxContainer = parts[1]
+	var title := _label("局域网合作", 32)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var desc := _label("同一局域网内两人共用一块场地。主机负责关卡与消除，双方都能移动、旋转和硬降当前方块。", 13, Color("9fb8de"))
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.custom_minimum_size = Vector2(470, 0)
+	box.add_child(desc)
+
+	var ip_row := HBoxContainer.new()
+	ip_row.add_child(_label("主机 IP", 15, Color("9fb8de")))
+	net_ip_input = LineEdit.new()
+	net_ip_input.text = "127.0.0.1"
+	net_ip_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ip_row.add_child(net_ip_input)
+	box.add_child(ip_row)
+
+	var port_row := HBoxContainer.new()
+	port_row.add_child(_label("端口", 15, Color("9fb8de")))
+	net_port_input = SpinBox.new()
+	net_port_input.min_value = 1024
+	net_port_input.max_value = 65535
+	net_port_input.value = 37480
+	net_port_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	port_row.add_child(net_port_input)
+	box.add_child(port_row)
+
+	net_status_label = _label("未连接", 14, Color("ffe14d"))
+	net_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(net_status_label)
+
+	net_host_button = _button("创建房间（主机）", Vector2(0, 48), 17)
+	net_host_button.pressed.connect(_net_host)
+	box.add_child(net_host_button)
+	net_join_button = _button("加入房间（客户端）", Vector2(0, 48), 17)
+	net_join_button.pressed.connect(_net_join)
+	box.add_child(net_join_button)
+	var close := _button("断开并返回主页", Vector2(0, 44), 16)
+	close.pressed.connect(_net_close_and_menu)
+	box.add_child(close)
+	net_overlay.visible = false
 
 func _spin(min_v: int, max_v: int, value: int) -> SpinBox:
 	var s := SpinBox.new()
@@ -664,15 +844,18 @@ func _build_gameover(root: Control) -> void:
 func _show_menu() -> void:
 	started = false
 	menu_overlay.visible = true
+	settings_overlay.visible = false
+	net_overlay.visible = false
 	pause_overlay.visible = false
 	over_overlay.visible = false
 	continue_button.disabled = not TpGame.has_save()
 	update_touch_visibility()
 
-func _start_from_menu() -> void:
+func _save_settings_from_ui() -> void:
+	if diff_select == null:
+		return
 	var keys := TpConfig.DIFFICULTIES.keys()
-	var diff_id: String = keys[clampi(diff_select.selected, 0, keys.size() - 1)]
-	settings["difficulty"] = diff_id
+	settings["difficulty"] = keys[clampi(diff_select.selected, 0, keys.size() - 1)]
 	settings["custom"] = custom_check.button_pressed
 	settings["dims"] = Vector3i(int(dim_x.value), int(dim_y.value), int(dim_z.value))
 	settings["dimension"] = int(dimension_select.get_item_id(dimension_select.selected))
@@ -685,6 +868,20 @@ func _start_from_menu() -> void:
 		settings["seed"] = int(seed_text) if seed_text.is_valid_int() else seed_text.hash()
 	TpGame.save_settings(settings)
 
+func _open_settings() -> void:
+	menu_overlay.visible = false
+	settings_overlay.visible = true
+	update_touch_visibility()
+
+func _close_settings() -> void:
+	_save_settings_from_ui()
+	settings_overlay.visible = false
+	menu_overlay.visible = true
+	update_touch_visibility()
+
+func _start_from_menu() -> void:
+	_save_settings_from_ui()
+	var diff_id := str(settings["difficulty"])
 	var speed_mult := 1.0
 	var dims := Vector3i.ZERO
 	var dim_override := 0
@@ -697,14 +894,30 @@ func _start_from_menu() -> void:
 		var base_speed: float = TpConfig.difficulty(diff_id)["speed"]
 		speed_mult = maxf(0.05, float(settings["speed"]) / base_speed)
 	options = {"dims": dims, "dimension": dim_override, "speed_multiplier": speed_mult}
-	var seed_value: int = (Time.get_ticks_usec() if settings["seed"] == null else int(settings["seed"])) & 0x7fffffff
+	var seed_value: int = _seed_value()
 	_new_game(seed_value, diff_id)
 	TpGame.clear_save()
 
-func _new_game(seed_value: int, diff_id: String) -> void:
-	game = TpGame.new(seed_value, diff_id, options)
+func _start_endless() -> void:
+	_save_settings_from_ui()
+	options = {"dims": Vector3i.ZERO, "dimension": 0, "speed_multiplier": 1.0}
+	_new_game(_seed_value(), str(settings["difficulty"]), {"endless": true})
+	TpGame.clear_save()
+	_show_toast("无尽模式：固定阶段五，无限挑战")
+
+func _seed_value() -> int:
+	return (Time.get_ticks_usec() if settings["seed"] == null else int(settings["seed"])) & 0x7fffffff
+
+func _new_game(seed_value: int, diff_id: String, extra: Dictionary = {}) -> void:
+	var opts := options.duplicate()
+	for key in extra:
+		opts[key] = extra[key]
+	game = TpGame.new(seed_value, diff_id, opts)
+	game_mode = "endless" if bool(opts.get("endless", false)) else "normal"
 	started = true
 	menu_overlay.visible = false
+	settings_overlay.visible = false
+	net_overlay.visible = false
 	pause_overlay.visible = false
 	over_overlay.visible = false
 	_last_version = -1
@@ -718,8 +931,13 @@ func _continue_game() -> void:
 	if not game.load_from_disk():
 		_show_toast("存档损坏或不存在")
 		return
+	if game.status == "paused":
+		game.status = "playing"
+	game_mode = "endless" if game.endless else "normal"
 	started = true
 	menu_overlay.visible = false
+	settings_overlay.visible = false
+	net_overlay.visible = false
 	_last_version = -1
 	_reframe()
 	_rebuild_field()
@@ -728,8 +946,19 @@ func _continue_game() -> void:
 	_show_toast("存档已读取")
 
 func _restart_game() -> void:
-	_new_game((Time.get_ticks_usec()) & 0x7fffffff, str(settings["difficulty"]))
-	TpGame.clear_save()
+	if net_role == "client":
+		_net_send("restart")
+		return
+	if game_mode == "endless":
+		_new_game(_seed_value(), str(settings["difficulty"]), {"endless": true})
+	elif game_mode == "coop" and net_role == "host":
+		_new_game(_seed_value(), str(settings["difficulty"]))
+		game_mode = "coop"
+		_broadcast_state()
+	else:
+		_new_game((Time.get_ticks_usec()) & 0x7fffffff, str(settings["difficulty"]))
+	if net_role != "client":
+		TpGame.clear_save()
 
 func _pause_pressed() -> void:
 	_pause_game()
@@ -740,6 +969,9 @@ func _pause_game() -> void:
 	if pending_item != "":
 		_cancel_target()
 		return
+	if net_role == "client":
+		_net_send("pause")
+		return
 	if not game.can_pause():
 		_show_toast("当前难度不可暂停")
 		return
@@ -747,46 +979,230 @@ func _pause_game() -> void:
 		_resume_game()
 		return
 	game.toggle_pause()
-	game.save_to_disk()
+	if game_mode != "coop":
+		game.save_to_disk()
 	pause_overlay.visible = true
 	update_touch_visibility()
 	var info: Label = pause_overlay.find_child("Info", true, false)
 	if info:
 		info.text = "阶段%s · 分数 %d" % [TpConfig.STAGE_NAMES[game.stage - 1], game.score]
+	_broadcast_state()
 
 func _resume_game() -> void:
+	if net_role == "client":
+		_net_send("pause")
+		return
 	if game.status == "paused":
 		game.toggle_pause()
 	pause_overlay.visible = false
 	update_touch_visibility()
+	_broadcast_state()
 
 func _back_to_menu() -> void:
-	if started and game.status == "playing":
+	if net_role != "off":
+		_net_close()
+	if started and game.status == "playing" and game_mode != "coop":
 		game.save_to_disk()
 	started = false
 	menu_overlay.visible = true
+	settings_overlay.visible = false
+	net_overlay.visible = false
 	pause_overlay.visible = false
 	over_overlay.visible = false
 	continue_button.disabled = not TpGame.has_save()
 	update_touch_visibility()
 
 func _show_gameover() -> void:
+	if net_role == "host" and started:
+		_broadcast_state()
 	started = false
-	TpGame.clear_save()
+	if game_mode != "coop":
+		TpGame.clear_save()
 	over_overlay.visible = true
 	var info: Label = over_overlay.find_child("Info", true, false)
 	if info:
+		var stage_text: String = "无尽（阶段五）" if game.endless else TpConfig.STAGE_NAMES[game.stage - 1]
 		info.text = "最终分数 %d\n到达阶段 %s\n难度 %s" % [
-			game.score, TpConfig.STAGE_NAMES[game.stage - 1], str(game.difficulty()["label"])
+			game.score, stage_text, str(game.difficulty()["label"])
 		]
 	update_touch_visibility()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if started and game != null and game.status == "playing":
+		if started and game != null and game.status == "playing" and game_mode != "coop":
 			game.save_to_disk()
 	if what == NOTIFICATION_WM_SIZE_CHANGED:
 		update_touch_visibility()
+
+func _open_net() -> void:
+	menu_overlay.visible = false
+	settings_overlay.visible = false
+	net_overlay.visible = true
+	_net_stat("未连接")
+	update_touch_visibility()
+
+func _net_stat(text: String) -> void:
+	net_status = text
+	if net_status_label != null:
+		net_status_label.text = text
+
+func _net_host() -> void:
+	_net_close()
+	var peer := ENetMultiplayerPeer.new()
+	var port := int(net_port_input.value)
+	var err := peer.create_server(port, 1)
+	if err != OK:
+		_net_stat("创建房间失败（端口 %d）" % port)
+		return
+	multiplayer.multiplayer_peer = peer
+	net_role = "host"
+	_net_stat("等待玩家加入 · %s:%d" % [_lan_ip(), port])
+
+func _net_join() -> void:
+	_net_close()
+	var peer := ENetMultiplayerPeer.new()
+	var ip := net_ip_input.text.strip_edges()
+	if ip == "":
+		ip = "127.0.0.1"
+	var err := peer.create_client(ip, int(net_port_input.value))
+	if err != OK:
+		_net_stat("连接失败")
+		return
+	multiplayer.multiplayer_peer = peer
+	net_role = "client"
+	_net_stat("正在连接 %s …" % ip)
+
+func _lan_ip() -> String:
+	for address in IP.get_local_addresses():
+		if address.begins_with("192.168.") or address.begins_with("10.") or address.begins_with("172."):
+			return address
+	return "127.0.0.1"
+
+func _net_close() -> void:
+	net_role = "off"
+	_net_stat("未连接")
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	_net_sync = 0.0
+
+func _net_close_and_menu() -> void:
+	_net_close()
+	started = false
+	menu_overlay.visible = true
+	net_overlay.visible = false
+	pause_overlay.visible = false
+	over_overlay.visible = false
+	update_touch_visibility()
+
+func _on_peer_connected(id: int) -> void:
+	if net_role != "host":
+		return
+	_net_stat("玩家 %d 已加入，开始合作" % id)
+	_net_start_coop()
+
+func _on_peer_disconnected(id: int) -> void:
+	if net_role == "host":
+		_net_stat("玩家 %d 已离开" % id)
+		_show_toast("队友已离开，可继续单人游戏")
+
+func _on_connected_to_server() -> void:
+	if net_role != "client":
+		return
+	_net_stat("已连接，等待主机同步")
+
+func _on_connection_failed() -> void:
+	if net_role != "client":
+		return
+	_net_close()
+	_net_stat("连接失败，请检查 IP 与端口")
+
+func _on_server_disconnected() -> void:
+	if net_role != "client":
+		return
+	_net_close()
+	started = false
+	_show_menu()
+	_show_toast("与主机的连接已断开")
+
+func _net_start_coop() -> void:
+	if net_role != "host":
+		return
+	_new_game(_seed_value(), str(settings["difficulty"]))
+	game_mode = "coop"
+	net_overlay.visible = false
+	menu_overlay.visible = false
+	_net_stat("合作进行中 · 双方共用场地")
+	_broadcast_state()
+
+func _broadcast_state() -> void:
+	if net_role != "host" or game == null:
+		return
+	if multiplayer.get_peers().is_empty():
+		return
+	rpc("_net_state", game.capture_save())
+
+@rpc("authority", "call_remote", "reliable")
+func _net_state(data: Dictionary) -> void:
+	if net_role != "client":
+		return
+	var old_dims: Vector3i = game.field.dims if game != null else Vector3i.ZERO
+	if game == null:
+		game = TpGame.new(1, str(settings["difficulty"]))
+	game.restore_save(data)
+	game_mode = "coop"
+	net_overlay.visible = false
+	menu_overlay.visible = false
+	settings_overlay.visible = false
+	_last_version = -1
+	if game.field.dims != old_dims:
+		_reframe()
+	if game.status == "gameover":
+		over_overlay.visible = true
+		started = false
+		var info: Label = over_overlay.find_child("Info", true, false)
+		if info:
+			info.text = "最终分数 %d\n到达阶段 %s\n难度 %s" % [
+				game.score, TpConfig.STAGE_NAMES[game.stage - 1], str(game.difficulty()["label"])
+			]
+		update_touch_visibility()
+		return
+	over_overlay.visible = false
+	started = true
+	pause_overlay.visible = game.status == "paused"
+	if pause_overlay.visible:
+		var info: Label = pause_overlay.find_child("Info", true, false)
+		if info:
+			info.text = "阶段%s · 分数 %d" % [TpConfig.STAGE_NAMES[game.stage - 1], game.score]
+	_next_preview()
+	update_touch_visibility()
+
+@rpc("any_peer", "call_remote", "reliable")
+func _net_cmd(action: String, a: int = 0, b: int = 0, c: int = 0, axis: String = "", size: int = 0, item: String = "") -> void:
+	if net_role != "host" or not started or game == null:
+		return
+	match action:
+		"move":
+			game.move(a, b)
+		"rotate":
+			game.rotate(axis, a)
+		"soft":
+			game.soft_drop()
+		"hard":
+			game.hard_drop()
+		"pause":
+			_pause_game()
+		"item":
+			game.use_item(item, Vector3i(a, b, c), axis, size)
+		"restart":
+			_restart_game()
+	_broadcast_state()
+
+func _net_send(action: String, a: int = 0, b: int = 0, c: int = 0, axis: String = "", size: int = 0, item: String = "") -> void:
+	if net_role != "client":
+		return
+	var peer := multiplayer.multiplayer_peer
+	if peer == null or peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
+	rpc_id(1, "_net_cmd", action, a, b, c, axis, size, item)
 
 func update_touch_visibility() -> void:
 	if touch_root == null:
@@ -800,23 +1216,43 @@ func update_touch_visibility() -> void:
 		blocking = true
 	if over_overlay != null and over_overlay.visible:
 		blocking = true
+	if settings_overlay != null and settings_overlay.visible:
+		blocking = true
+	if net_overlay != null and net_overlay.visible:
+		blocking = true
 	touch_root.visible = show and started and not blocking
 
 func _move(dx: int, dy: int) -> void:
+	if net_role == "client":
+		_net_send("move", dx, dy)
+		return
 	if started and game.status == "playing":
 		game.move(dx, dy)
+		_broadcast_state()
 
 func _rotate(axis: String, dir: int) -> void:
+	if net_role == "client":
+		_net_send("rotate", dir, 0, 0, axis)
+		return
 	if started and game.status == "playing":
 		game.rotate(axis, dir)
+		_broadcast_state()
 
 func _soft_drop() -> void:
+	if net_role == "client":
+		_net_send("soft")
+		return
 	if started and game.status == "playing":
 		game.soft_drop()
+		_broadcast_state()
 
 func _hard_drop() -> void:
+	if net_role == "client":
+		_net_send("hard")
+		return
 	if started and game.status == "playing":
 		game.hard_drop()
+		_broadcast_state()
 
 func _begin_item(id: String) -> void:
 	if not started or game.status != "playing":
@@ -833,9 +1269,15 @@ func _cancel_target() -> void:
 func _use_item_at(cell: Vector3i) -> void:
 	if pending_item == "":
 		return
+	if net_role == "client":
+		_net_send("item", cell.x, cell.y, cell.z, target_axis, target_size, pending_item)
+		pending_item = ""
+		_show_toast("道具请求已发送")
+		return
 	if game.use_item(pending_item, cell, target_axis, target_size):
 		pending_item = ""
 		_show_toast("道具已使用")
+		_broadcast_state()
 
 func _pick_cell(screen_pos: Vector2) -> Vector3i:
 	var from := camera.project_ray_origin(screen_pos)
@@ -863,6 +1305,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					_cancel_target()
 				elif started:
 					_pause_game()
+			KEY_HOME:
+				_reset_view()
 			KEY_LEFT:
 				_move(-1, 0)
 			KEY_RIGHT:
@@ -902,13 +1346,48 @@ func _unhandled_input(event: InputEvent) -> void:
 				target_axis = "y"
 			KEY_Z:
 				target_axis = "z"
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if pending_item != "":
-			var cell := _pick_cell(event.position)
-			if cell.x >= 0:
-				_use_item_at(cell)
-	if event is InputEventScreenTouch and event.pressed:
-		if pending_item != "":
-			var cell := _pick_cell(event.position)
-			if cell.x >= 0:
-				_use_item_at(cell)
+	if event is InputEventMouseButton:
+		var button: int = event.button_index
+		if event.pressed:
+			if button == MOUSE_BUTTON_WHEEL_UP:
+				_zoom(0.88)
+			elif button == MOUSE_BUTTON_WHEEL_DOWN:
+				_zoom(1.14)
+			elif button == MOUSE_BUTTON_LEFT:
+				if pending_item != "":
+					var cell := _pick_cell(event.position)
+					if cell.x >= 0:
+						_use_item_at(cell)
+				else:
+					_orbiting = true
+					_orbit_button = MOUSE_BUTTON_LEFT
+			elif button == MOUSE_BUTTON_RIGHT:
+				_orbiting = true
+				_orbit_button = MOUSE_BUTTON_RIGHT
+			elif button == MOUSE_BUTTON_MIDDLE:
+				_orbiting = true
+				_orbit_button = MOUSE_BUTTON_MIDDLE
+		elif button == MOUSE_BUTTON_LEFT or button == MOUSE_BUTTON_RIGHT or button == MOUSE_BUTTON_MIDDLE:
+			_orbiting = false
+			_orbit_button = 0
+	if event is InputEventMouseMotion and _orbiting:
+		if _orbit_button == MOUSE_BUTTON_MIDDLE:
+			_pan(event.relative.x, event.relative.y)
+		else:
+			_orbit(event.relative.x, event.relative.y)
+	if event is InputEventMagnifyGesture:
+		_zoom(1.0 / maxf(0.05, event.factor))
+	if event is InputEventPanGesture:
+		_pan(event.delta.x * 3.0, event.delta.y * 3.0)
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if pending_item != "":
+				var cell := _pick_cell(event.position)
+				if cell.x >= 0:
+					_use_item_at(cell)
+			else:
+				_orbiting = true
+		else:
+			_orbiting = false
+	if event is InputEventScreenDrag:
+		_orbit(event.relative.x, event.relative.y)
