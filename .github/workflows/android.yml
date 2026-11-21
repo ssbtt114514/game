@@ -96,23 +96,60 @@ jobs:
           godot-version: "4.3"
           working-directory: godot
 
-      - name: Verify APK
+      - name: Split APKs by ABI
         run: |
-          test -f godot/build/tetris-plus.apk
-          sha256sum godot/build/tetris-plus.apk | tee godot/build/tetris-plus.apk.sha256
-          ls -lh godot/build/tetris-plus.apk
+          set -euo pipefail
+          SRC="godot/build/tetris-plus.apk"
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BUILD_TOOLS/apksigner" verify --verbose godot/build/tetris-plus.apk
-          if [ -x "$BUILD_TOOLS/aapt2" ]; then
-            "$BUILD_TOOLS/aapt2" dump badging godot/build/tetris-plus.apk | head -5
-          fi
+          for pair in "64:arm64-v8a" "32:armeabi-v7a"; do
+            suffix="${pair%%:*}"
+            keep="${pair##*:}"
+            out="godot/build/tetris-plus-${suffix}.apk"
+            cp "$SRC" "$out"
+            if [ "$keep" = "arm64-v8a" ]; then
+              zip -q -d "$out" "lib/armeabi-v7a/*"
+            else
+              zip -q -d "$out" "lib/arm64-v8a/*"
+            fi
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$out" "$out.tmp"
+            mv "$out.tmp" "$out"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$GITHUB_WORKSPACE/tetrisplus.keystore" \
+              --ks-pass pass:tetrisplus-ci \
+              --ks-key-alias tetrisplus \
+              --key-pass pass:tetrisplus-ci "$out"
+            unzip -l "$out" | grep "libgodot_android.so"
+            sha256sum "$out" | tee "$out.sha256"
+          done
 
-      - name: Upload APK
+      - name: Verify APKs
+        run: |
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for out in godot/build/tetris-plus-32.apk godot/build/tetris-plus-64.apk; do
+            test -f "$out"
+            ls -lh "$out"
+            "$BUILD_TOOLS/apksigner" verify --verbose "$out"
+            if [ -x "$BUILD_TOOLS/aapt2" ]; then
+              "$BUILD_TOOLS/aapt2" dump badging "$out" | head -5
+            fi
+          done
+
+      - name: Upload 32-bit APK
         uses: actions/upload-artifact@v4
         with:
-          name: tetris-plus-android
+          name: tetris-plus-android32
           path: |
-            godot/build/tetris-plus.apk
-            godot/build/tetris-plus.apk.sha256
+            godot/build/tetris-plus-32.apk
+            godot/build/tetris-plus-32.apk.sha256
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload 64-bit APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tetris-plus-android64
+          path: |
+            godot/build/tetris-plus-64.apk
+            godot/build/tetris-plus-64.apk.sha256
           retention-days: 30
           if-no-files-found: error

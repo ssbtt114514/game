@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_lock_clear()
 	_test_endless()
 	_test_dev_mode()
+	_test_clear_settle()
 	_test_fluid()
 	_test_game()
 	_test_save()
@@ -186,6 +187,20 @@ func _test_dev_mode() -> void:
 	var e := TpGame.new(7, "normal", {"endless": true})
 	e.dev_set_stage(1)
 	check(e.stage == 5, "无尽模式开发跳转仍为阶段五")
+
+func _test_clear_settle() -> void:
+	var g := TpGame.new(11, "normal")
+	g.stage = 2
+	g.field = TpField.new(Vector3i(10, 1, 20))
+	for x in 10:
+		g.field.set_cell(x, 0, 0, TpConfig.KIND_BLOCK, 0, 0)
+	g.field.set_cell(3, 0, 2, TpConfig.KIND_BLOCK, 1, 0)
+	g.field.set_cell(3, 0, 3, TpConfig.KIND_BLOCK, 2, 0)
+	g._resolve_board()
+	check(g.field.kind[g.field.index(3, 0, 0)] != 0, "消除后上方方块落到最底")
+	check(g.field.kind[g.field.index(3, 0, 1)] != 0, "消除后叠层方块连续下落")
+	check(g.field.kind[g.field.index(3, 0, 2)] == 0 and g.field.kind[g.field.index(3, 0, 3)] == 0, "消除后原位置清空")
+	check(g.score >= TpConfig.SCORE_LINE, "消除计分")
 
 func _test_fluid() -> void:
 	var f := TpField.new(Vector3i(3, 1, 4))

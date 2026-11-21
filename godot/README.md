@@ -29,7 +29,7 @@ godot --headless --path godot -s res://tests/run_tests.gd
 xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -s res://tests/ui_smoke.gd
 ```
 
-当前规则测试 163 项通过，界面冒烟测试 43 项通过。
+当前规则测试 167 项通过，界面冒烟测试 43 项通过。
 
 ## 开发模式
 
@@ -37,7 +37,7 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 ## Android 导出
 
-`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`，同时包含 `armeabi-v7a` 与 `arm64-v8a`。CI 使用 `dulvui/godot-android-export` 的本地补丁版（见 `.github/actions/godot-android-export`）安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
+`export_presets.cfg` 预设名为 `Android`，先导出包含 `armeabi-v7a` 与 `arm64-v8a` 的 `build/tetris-plus.apk`，再拆分为 `build/tetris-plus-32.apk` 与 `build/tetris-plus-64.apk` 并分别重新签名。CI 使用 `dulvui/godot-android-export` 的本地补丁版（见 `.github/actions/godot-android-export`）安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
 
 `.github/workflows/android.yml` 会：
 

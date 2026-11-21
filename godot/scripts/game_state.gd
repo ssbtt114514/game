@@ -332,6 +332,7 @@ func _resolve_board() -> void:
 				"color": int(field.color[i]),
 			})
 			field.clear_cell_by_index(i)
+	_settle_after_item()
 	add_score(int(outcome["points"]))
 	add_event("clear", {
 		"points": int(outcome["points"]),
@@ -570,15 +571,27 @@ func use_item(id: String, target: Vector3i, axis: String = "z", size: int = 3) -
 	return true
 
 func _settle_after_item() -> void:
-	for i in field.solid_set.keys():
-		if not field.solid_set.has(i):
-			continue
-		var cell := field.cell_from_index(i)
-		var distance := 0
-		while cell.z - distance - 1 >= 0 and field.is_empty(cell.x, cell.y, cell.z - distance - 1):
-			distance += 1
-		if distance > 0:
-			field.move_cell(cell, cell + Vector3i(0, 0, -distance))
+	var upward := is_anti_gravity()
+	for y in field.dims.y:
+		for x in field.dims.x:
+			if upward:
+				var write_up := field.dims.z - 1
+				for z in range(field.dims.z - 1, -1, -1):
+					var i := field.index(x, y, z)
+					if field.kind[i] == 0:
+						continue
+					if z != write_up:
+						field.move_cell(Vector3i(x, y, z), Vector3i(x, y, write_up))
+					write_up -= 1
+			else:
+				var write := 0
+				for z in field.dims.z:
+					var i := field.index(x, y, z)
+					if field.kind[i] == 0:
+						continue
+					if z != write:
+						field.move_cell(Vector3i(x, y, z), Vector3i(x, y, write))
+					write += 1
 
 func _end_game() -> void:
 	if status == "gameover":
