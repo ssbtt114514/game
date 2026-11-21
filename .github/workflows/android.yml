@@ -13,6 +13,13 @@ on:
       - ".github/actions/godot-android-export/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Release build (disable dev mode)"
+        type: boolean
+        default: false
+  release:
+    types: [published]
 
 concurrency:
   group: android-${{ github.ref }}
@@ -26,6 +33,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Enable dev mode for non-release builds
+        if: ${{ !inputs.release && github.event_name != 'release' && !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("godot/project.godot")
+          path.write_text(path.read_text().replace("dev_mode=false", "dev_mode=true"))
+          PY
+          grep -n "dev_mode" godot/project.godot
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

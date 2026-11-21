@@ -26,6 +26,7 @@ func _init() -> void:
 	_test_clears()
 	_test_lock_clear()
 	_test_endless()
+	_test_dev_mode()
 	_test_fluid()
 	_test_game()
 	_test_save()
@@ -172,6 +173,19 @@ func _test_endless() -> void:
 	var restored := TpGame.new(1, "normal")
 	restored.restore_save(g.capture_save())
 	check(restored.endless and restored.stage == 5, "无尽模式存档往返")
+
+func _test_dev_mode() -> void:
+	var g := TpGame.new(7, "normal")
+	g.dev_set_stage(3)
+	check(g.stage == 3 and g.score == 800, "开发跳转阶段三与分数")
+	check(g.field.dims == Vector3i(10, 10, 20), "开发跳转阶段三场地")
+	check(not g.active.is_empty(), "开发跳转后生成当前方块")
+	g.dev_set_stage(1)
+	check(g.stage == 1 and g.score == 0, "开发回退阶段一与分数")
+	check(g.field.dims == Vector3i(6, 1, 12), "开发回退阶段一场地")
+	var e := TpGame.new(7, "normal", {"endless": true})
+	e.dev_set_stage(1)
+	check(e.stage == 5, "无尽模式开发跳转仍为阶段五")
 
 func _test_fluid() -> void:
 	var f := TpField.new(Vector3i(3, 1, 4))

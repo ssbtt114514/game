@@ -86,15 +86,15 @@ configs/             默认 / 极难 / 趣味自定义三份 JSON 预设
 | M7 | 难度、自定义界面、暂停、音效、存档、移动端 | 已完成 |
 | M8 | 全量测试与交付文档 | 已完成 |
 
-当前版本 1.2.1：网页版完成 M0–M8，另含 Godot Android / Windows / Web 移植。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
+当前版本 1.3.0：网页版完成 M0–M8，另含 Godot Android / Windows / Web 移植。启动菜单支持五档难度、种子、自定义场地与设置导入导出；暂停/切后台自动存档，可读档续玩；音效全部实时合成；窄屏显示触屏控件。测试报告见 `docs/TEST_REPORT.md`，验收清单见 `docs/ACCEPTANCE.md`，裁定见 `ASSUMPTIONS.md`，变更记录见 `CHANGELOG.md`。
 
 ### 触屏
 
-窄屏或触摸设备底部显示操作区：←/→ 移动，前/后 调深度，↺/↻ 旋转，软降、硬降、暂停，以及六种道具按钮；点击道具后在画面上点选目标。
+窄屏或触摸设备底部显示操作区：←/→ 移动，前/后 调深度，↺/↻ 旋转，软降、硬降、暂停，以及六种道具按钮；软降可长按连续下落，点击道具后在画面上点选目标。
 
 ## Godot Android 版
 
-`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 157 项、界面与存档冒烟测试 40 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
+`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK（`armeabi-v7a` + `arm64-v8a`）。规则测试 163 项、界面与存档冒烟测试 43 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
 
 ```bash
 # 启动 Godot 工程
@@ -105,6 +105,8 @@ godot --headless --path godot -s res://tests/run_tests.gd
 ```
 
 推送 `godot/` 变更后，`Android APK` 工作流会构建 `godot/build/tetris-plus.apk` 并上传 artifact。
+
+非发布构建会在 `project.godot` 注入 `tetrisplus/dev_mode=true`，主页出现「开发模式」按钮，游戏中可按 F9 打开，调整分数、阶段与速度。GitHub Release、`release` 手动构建或 `v*` 标签构建保持 `dev_mode=false`。APK 同时包含 `armeabi-v7a` 与 `arm64-v8a`，可安装在 32 位与 64 位设备上。
 
 ## 配置预设
 

@@ -130,5 +130,16 @@ func _run() -> void:
 		Input.parse_input_event(release)
 		await create_timer(0.2).timeout
 		check(main.started, "触摸点击开始按钮")
+		var soft_btn: Button = null
+		for node in main.touch_root.find_children("*", "Button", true, false):
+			if (node as Button).text == "软降":
+				soft_btn = node
+		check(soft_btn != null, "触屏存在软降按钮")
+		if soft_btn != null:
+			soft_btn.button_down.emit()
+			await create_timer(0.1).timeout
+			check(main._soft_touch_held, "软降按钮长按生效")
+			soft_btn.button_up.emit()
+			check(not main._soft_touch_held, "软降按钮松开停止")
 	print("UI_SMOKE: failed=", failed)
 	quit(0 if failed == 0 else 1)

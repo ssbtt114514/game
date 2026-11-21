@@ -90,8 +90,20 @@ var mute_check: CheckBox
 var _menu_intro_nodes: Array[Control] = []
 var _menu_intro_tweens: Array[Tween] = []
 var _menu_intro_gen := 0
+var _dev_enabled := false
+var dev_overlay: Control
+var dev_score_input: SpinBox
+var dev_stage_select: OptionButton
+var dev_speed_slider: HSlider
+var dev_speed_label: Label
+var dev_info: Label
+var _dev_prev_status := ""
+var _soft_touch_held := false
+var _soft_repeat_timer := 0.0
+var _soft_key_timer := 0.0
 
 func _ready() -> void:
+	_dev_enabled = bool(ProjectSettings.get_setting("tetrisplus/dev_mode", false))
 	settings = TpGame.load_settings()
 	_build_world()
 	_build_ui()
@@ -307,6 +319,7 @@ func _process(delta: float) -> void:
 		game.tick(delta * 1000.0)
 		for event in game.drain_events():
 			_handle_event(event)
+	_tick_soft_hold(delta)
 	if net_role == "host" and started:
 		_net_sync += delta
 		if _net_sync >= 0.35:
@@ -510,6 +523,8 @@ func _build_ui() -> void:
 	_build_net(root)
 	_build_pause(root)
 	_build_gameover(root)
+	if _dev_enabled:
+		_build_dev()
 
 func _build_touch(root: Control) -> void:
 	touch_root = Control.new()
@@ -547,13 +562,18 @@ func _build_touch(root: Control) -> void:
 		["↺X", _rotate.bind("x", -1)], ["↻X", _rotate.bind("x", 1)],
 		["→", _move.bind(1, 0)], ["前", _move.bind(0, 1)], ["后", _move.bind(0, -1)],
 		["↺Y", _rotate.bind("y", -1)], ["↻Y", _rotate.bind("y", 1)],
-		["软降", _soft_drop], ["硬降", _hard_drop], ["暂停", _pause_pressed],
+		["软降", _soft_drop, true], ["硬降", _hard_drop], ["暂停", _pause_pressed],
 	]
 	for spec in specs:
 		var b := _button(str(spec[0]), Vector2(0, 46), 16)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		b.pressed.connect(spec[1])
+		if spec.size() > 2:
+			b.button_down.connect(_soft_touch_down)
+			b.button_up.connect(_soft_touch_up)
+			b.mouse_exited.connect(_soft_touch_up)
+		else:
+			b.pressed.connect(spec[1])
 		pad.add_child(b)
 
 	var view_col := VBoxContainer.new()
@@ -656,6 +676,12 @@ func _build_menu(root: Control) -> void:
 	continue_button.disabled = not TpGame.has_save()
 	box.add_child(continue_button)
 
+	var dev_btn: Button = null
+	if _dev_enabled:
+		dev_btn = _button("开发模式  ·  调试对局变量", Vector2(0, 40), 14)
+		dev_btn.pressed.connect(_open_dev_from_menu)
+		box.add_child(dev_btn)
+
 	var footer := _label("Esc 暂停 · 空格硬降 · 1–6 道具 · 更多按键见设置", 12, Color("6b7c99"))
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(footer)
@@ -664,6 +690,9 @@ func _build_menu(root: Control) -> void:
 		_menu_intro_nodes.append(node as Control)
 	for button in [start, endless, coop, settings_btn, continue_button]:
 		_bind_menu_button_motion(button as Button)
+	if dev_btn != null:
+		_menu_intro_nodes.insert(_menu_intro_nodes.size() - 1, dev_btn)
+		_bind_menu_button_motion(dev_btn)
 
 func _build_settings(root: Control) -> void:
 	var parts := _dialog(560, 660)
@@ -901,6 +930,169 @@ func _menu_button_scale(button: Button, target: float, duration: float = 0.12) -
 	tween.tween_property(button, "scale", Vector2.ONE * target, duration).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	button.set_meta("scale_tween", tween)
 
+func _soft_touch_down() -> void:
+	_soft_touch_held = true
+	_soft_repeat_timer = 0.075
+	_soft_drop()
+
+func _soft_touch_up() -> void:
+	_soft_touch_held = false
+	_soft_repeat_timer = 0.0
+
+func _tick_soft_hold(delta: float) -> void:
+	if not started or game == null or game.status != "playing" or (dev_overlay != null and dev_overlay.visible):
+		_soft_touch_held = false
+		_soft_repeat_timer = 0.0
+		_soft_key_timer = 0.0
+		return
+	if _soft_touch_held:
+		_soft_repeat_timer -= delta
+		if _soft_repeat_timer <= 0.0:
+			_soft_repeat_timer = 0.075
+			_soft_drop()
+	if Input.is_key_pressed(KEY_SHIFT):
+		_soft_key_timer -= delta
+		if _soft_key_timer <= 0.0:
+			_soft_key_timer = 0.075
+			_soft_drop()
+
+func _build_dev() -> void:
+	var parts := _dialog(500, 470)
+	dev_overlay = parts[0]
+	dev_overlay.visible = false
+	var box: VBoxContainer = parts[1]
+	var title := _label("开发模式", 28, Color("ffd166"))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	dev_info = _label("", 13, Color("9fb8de"))
+	dev_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(dev_info)
+
+	var score_row := HBoxContainer.new()
+	score_row.add_child(_label("分数", 15, Color("9fb8de")))
+	dev_score_input = _spin(0, 999999999, 0)
+	dev_score_input.step = 1000
+	dev_score_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	score_row.add_child(dev_score_input)
+	var apply_score := _button("应用", Vector2(74, 36), 14)
+	apply_score.pressed.connect(_dev_apply_score)
+	score_row.add_child(apply_score)
+	box.add_child(score_row)
+
+	var quick := HBoxContainer.new()
+	for spec in [["+1000", 1000], ["+10000", 10000], ["清零", -1]]:
+		var b := _button(str(spec[0]), Vector2(0, 36), 14)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(_dev_add_score.bind(int(spec[1])))
+		quick.add_child(b)
+	box.add_child(quick)
+
+	var stage_row := HBoxContainer.new()
+	stage_row.add_child(_label("阶段", 15, Color("9fb8de")))
+	dev_stage_select = OptionButton.new()
+	dev_stage_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for i in TpConfig.STAGE_NAMES.size():
+		dev_stage_select.add_item("阶段" + TpConfig.STAGE_NAMES[i], i + 1)
+	stage_row.add_child(dev_stage_select)
+	var apply_stage := _button("跳转", Vector2(74, 36), 14)
+	apply_stage.pressed.connect(_dev_apply_stage)
+	stage_row.add_child(apply_stage)
+	box.add_child(stage_row)
+
+	var speed_row := HBoxContainer.new()
+	speed_row.add_child(_label("速度", 15, Color("9fb8de")))
+	dev_speed_slider = HSlider.new()
+	dev_speed_slider.min_value = 0.1
+	dev_speed_slider.max_value = 5.0
+	dev_speed_slider.step = 0.05
+	dev_speed_slider.value = 1.0
+	dev_speed_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dev_speed_slider.value_changed.connect(_dev_set_speed)
+	speed_row.add_child(dev_speed_slider)
+	dev_speed_label = _label("1.00x", 14, Color("eaf3ff"))
+	dev_speed_label.custom_minimum_size = Vector2(58, 0)
+	speed_row.add_child(dev_speed_label)
+	box.add_child(speed_row)
+
+	var note := _label("仅开发构建可用；跳转阶段会清空场地并重生成方块；联机模式不可用。", 12, Color("e0a96d"))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(note)
+
+	var close := _button("关闭开发模式", Vector2(0, 42), 15)
+	close.pressed.connect(_close_dev)
+	box.add_child(close)
+
+func _open_dev_from_menu() -> void:
+	if not _dev_enabled:
+		return
+	if not started:
+		_start_from_menu()
+		if not started:
+			return
+	_open_dev()
+
+func _open_dev() -> void:
+	if not _dev_enabled or game == null or dev_overlay == null:
+		return
+	if net_role == "host" or net_role == "client":
+		_show_toast("联机模式不开放开发工具")
+		return
+	_dev_prev_status = game.status
+	if started and game.status == "playing":
+		game.status = "paused"
+	dev_score_input.value = game.score
+	dev_stage_select.select(clampi(game.stage - 1, 0, TpConfig.STAGE_NAMES.size() - 1))
+	dev_speed_slider.set_value_no_signal(game.speed_multiplier)
+	dev_speed_label.text = "%.2fx" % game.speed_multiplier
+	_dev_refresh_info()
+	dev_overlay.visible = true
+	update_touch_visibility()
+
+func _close_dev() -> void:
+	if dev_overlay == null:
+		return
+	dev_overlay.visible = false
+	if started and game != null and _dev_prev_status == "playing" and game.status == "paused":
+		game.status = "playing"
+	_dev_prev_status = ""
+	update_touch_visibility()
+
+func _dev_apply_score() -> void:
+	if not started or game == null:
+		return
+	game.score = maxi(0, int(dev_score_input.value))
+	game.add_event("score", {"score": game.score})
+	game._refresh_stage()
+	dev_score_input.value = game.score
+	_dev_refresh_info()
+
+func _dev_add_score(points: int) -> void:
+	if not started or game == null:
+		return
+	game.score = 0 if points < 0 else game.score + points
+	game.add_event("score", {"score": game.score})
+	game._refresh_stage()
+	dev_score_input.value = game.score
+	_dev_refresh_info()
+
+func _dev_set_speed(value: float) -> void:
+	if game != null:
+		game.speed_multiplier = value
+	dev_speed_label.text = "%.2fx" % value
+
+func _dev_apply_stage() -> void:
+	if not started or game == null:
+		return
+	game.dev_set_stage(int(dev_stage_select.get_item_id(dev_stage_select.selected)))
+	dev_score_input.value = game.score
+	_dev_refresh_info()
+
+func _dev_refresh_info() -> void:
+	if game == null or dev_info == null:
+		return
+	dev_info.text = "阶段 %s · 分数 %d · 速度 %.2fx · 状态 %s" % [
+		TpConfig.STAGE_NAMES[game.stage - 1], game.score, game.speed_multiplier, game.status]
+
 func _save_settings_from_ui() -> void:
 	if diff_select == null:
 		return
@@ -972,6 +1164,12 @@ func _new_game(seed_value: int, diff_id: String, extra: Dictionary = {}) -> void
 	pause_overlay.visible = false
 	over_overlay.visible = false
 	_last_version = -1
+	_soft_touch_held = false
+	_soft_repeat_timer = 0.0
+	_soft_key_timer = 0.0
+	if dev_overlay != null:
+		dev_overlay.visible = false
+	_dev_prev_status = ""
 	_reframe()
 	_rebuild_field()
 	_next_preview()
@@ -1271,7 +1469,11 @@ func update_touch_visibility() -> void:
 		blocking = true
 	if net_overlay != null and net_overlay.visible:
 		blocking = true
+	if dev_overlay != null and dev_overlay.visible:
+		blocking = true
 	touch_root.visible = show and started and not blocking
+	if not touch_root.visible:
+		_soft_touch_held = false
 
 func _move(dx: int, dy: int) -> void:
 	if net_role == "client":
@@ -1358,6 +1560,12 @@ func _unhandled_input(event: InputEvent) -> void:
 					_pause_game()
 			KEY_HOME:
 				_reset_view()
+			KEY_F9:
+				if _dev_enabled:
+					if dev_overlay.visible:
+						_close_dev()
+					else:
+						_open_dev()
 			KEY_LEFT:
 				_move(-1, 0)
 			KEY_RIGHT:
@@ -1381,6 +1589,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE:
 				_hard_drop()
 			KEY_SHIFT:
+				_soft_key_timer = 0.075
 				_soft_drop()
 			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
 				if pending_item == "line" and event.keycode == KEY_3:

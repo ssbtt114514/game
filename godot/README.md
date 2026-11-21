@@ -29,11 +29,15 @@ godot --headless --path godot -s res://tests/run_tests.gd
 xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -s res://tests/ui_smoke.gd
 ```
 
-当前规则测试 157 项通过，界面冒烟测试 40 项通过。
+当前规则测试 163 项通过，界面冒烟测试 43 项通过。
+
+## 开发模式
+
+`project.godot` 的 `[tetrisplus] dev_mode` 控制开发工具。开启后主页出现「开发模式」按钮，游戏中按 F9 打开，可修改分数、跳转阶段与调节速度；联机模式禁用。CI 仅在非发布构建注入 `dev_mode=true`，GitHub Release、`release` 手动构建和 `v*` 标签构建保持关闭。
 
 ## Android 导出
 
-`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`。CI 使用 `dulvui/godot-android-export` 的本地补丁版（见 `.github/actions/godot-android-export`）安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
+`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`，同时包含 `armeabi-v7a` 与 `arm64-v8a`。CI 使用 `dulvui/godot-android-export` 的本地补丁版（见 `.github/actions/godot-android-export`）安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
 
 `.github/workflows/android.yml` 会：
 
@@ -52,9 +56,9 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 ## 操作
 
-- 键盘：←/→ 移动，↑/↓ 前后，Shift 软降，空格硬降，Q/E、R/F、T/G 三轴旋转，1–6 道具，Esc 暂停，Home 重置视角。
+- 键盘：←/→ 移动，↑/↓ 前后，Shift 软降（可按住连续），空格硬降，Q/E、R/F、T/G 三轴旋转，1–6 道具，Esc 暂停，Home 重置视角。
 - 视角：拖动画面旋转，滚轮缩放，中键拖动平移。
-- 触屏：底部提供移动、前后、三轴旋转、软降、硬降、暂停与六种道具按钮；右侧提供缩放与视角重置。
+- 触屏：底部提供移动、前后、三轴旋转、软降（长按连续）、硬降、暂停与六种道具按钮；右侧提供缩放与视角重置。
 - 道具选中后点击/触摸画面选取目标；一字 TNT 与墙壁炸弹用 X/Y/Z 与 3/5 调整。
 
 ## Windows / Web 导出

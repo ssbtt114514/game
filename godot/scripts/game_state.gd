@@ -212,6 +212,25 @@ func add_score(points: int) -> void:
 	add_event("score", {"score": score})
 	_refresh_stage()
 
+func dev_set_stage(target: int) -> void:
+	if status == "gameover":
+		return
+	stage = 5 if endless else clampi(target, 1, max_stage)
+	score = int(TpConfig.STAGE_THRESHOLDS[stage - 1])
+	var dims := custom_dims if custom_dims != Vector3i.ZERO else dims_for_stage(stage)
+	field = TpField.new(dims)
+	fluids.reset()
+	next_queue.clear()
+	_fill_queue()
+	active = {}
+	_spawn_next()
+	gravity_timer = 0.0
+	lock_timer = 0.0
+	grounded = false
+	add_event("score", {"score": score})
+	add_event("resize", {"dims": dims})
+	add_event("stage", {"stage": stage})
+
 func _refresh_stage() -> void:
 	if endless:
 		return
