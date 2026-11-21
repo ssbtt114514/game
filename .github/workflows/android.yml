@@ -96,14 +96,30 @@ jobs:
           godot-version: "4.3"
           working-directory: godot
 
+      - name: Export 32-bit compatibility APK
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("godot/project.godot")
+          text = path.read_text()
+          text = text.replace('renderer/rendering_method="mobile"', 'renderer/rendering_method="gl_compatibility"')
+          text = text.replace('renderer/rendering_method.mobile="mobile"', 'renderer/rendering_method.mobile="gl_compatibility"')
+          path.write_text(text)
+          PY
+          grep -n "rendering_method" godot/project.godot
+          godot --headless --path godot --export-release Android godot/build/tetris-plus-gl.apk
+          test -f godot/build/tetris-plus-gl.apk
+
       - name: Split APKs by ABI
         run: |
           set -euo pipefail
-          SRC="godot/build/tetris-plus.apk"
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          for pair in "64:arm64-v8a" "32:armeabi-v7a"; do
+          for pair in "64:arm64-v8a:godot/build/tetris-plus.apk" "32:armeabi-v7a:godot/build/tetris-plus-gl.apk"; do
             suffix="${pair%%:*}"
-            keep="${pair##*:}"
+            rest="${pair#*:}"
+            keep="${rest%%:*}"
+            SRC="${rest##*:}"
             out="godot/build/tetris-plus-${suffix}.apk"
             cp "$SRC" "$out"
             if [ "$keep" = "arm64-v8a" ]; then

@@ -95,3 +95,5 @@
 
 44. 消除结算后，实体方块沿当前重力方向压实填补空位；该沉降不触发连锁消除，每次锁定只判定一次消除。
 45. Android 安装包按 ABI 拆分：`tetris-plus-32.apk` 仅含 `armeabi-v7a`，`tetris-plus-64.apk` 仅含 `arm64-v8a`，两者使用同一签名。
+
+46. 32 位 APK 使用 `gl_compatibility` 渲染器（OpenGL ES 3.0），64 位 APK 使用 `mobile`；Godot 4 的最低图形要求为 OpenGL ES 3.0，ES 2.0-only 设备不在支持范围。
