@@ -33,7 +33,7 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 ## Android 导出
 
-`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`。CI 使用 `dulvui/godot-android-export@v4.2.0` 安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
+`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`。CI 使用 `dulvui/godot-android-export@v4.1.0` 安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
 
 `.github/workflows/android.yml` 会：
 

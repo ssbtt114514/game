@@ -68,7 +68,7 @@ jobs:
           CREDS
 
       - name: Export Android APK
-        uses: dulvui/godot-android-export@v4.2.0
+        uses: dulvui/godot-android-export@v4.1.0
         with:
           godot-version: "4.3"
           working-directory: godot
