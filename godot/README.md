@@ -33,13 +33,13 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 ## Android 导出
 
-`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`。CI 使用 `dulvui/godot-android-export@v4.1.0` 安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
+`export_presets.cfg` 预设名为 `Android`，产物路径固定为 `build/tetris-plus.apk`。CI 使用 `dulvui/godot-android-export` 的本地补丁版（见 `.github/actions/godot-android-export`）安装 Godot、导出模板、Android SDK 与 JDK，然后生成签名 APK。
 
 `.github/workflows/android.yml` 会：
 
 1. 安装 JDK 17、Android SDK 与 build-tools 34。
 2. 生成 CI 专用签名密钥并写入 `.godot/export_credentials.cfg`。
-3. 调用 `dulvui/godot-android-export` 执行 `godot --headless --path godot --export-release Android`。
+3. 调用本地补丁版 `godot-android-export` 执行 `godot --headless --path godot --export-release Android`。
 4. 校验 `godot/build/tetris-plus.apk`，输出 SHA-256 并上传为 `tetris-plus-android` artifact。
 
 包名：`com.monkeycode.tetrisplus`，版本名 `1.0.0`，目标架构 `arm64-v8a`，横屏沉浸式。

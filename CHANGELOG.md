@@ -9,7 +9,7 @@
 - 新增 `godot/` Godot 4.3 工程，使用 GDScript 移植五阶段、三维场地、颜色消除、流体、道具、事件、方块属性与存档。
 - 程序化 3D 渲染、HUD、启动/暂停/结束菜单、触屏操作与 Android 横屏沉浸式配置。
 - Godot 无头规则测试 144 项、界面与存档冒烟测试 19 项。
-- GitHub Actions `Android APK` 工作流，使用 `dulvui/godot-android-export@v4.1.0` 编译并上传签名 APK。
+- GitHub Actions `Android APK` 工作流，使用 `dulvui/godot-android-export` 的本地补丁版编译并上传签名 APK；补丁仅修复其依赖的 `setup-android` 安装已下线 `tools` 包的问题。
 
 ## [1.0.0] - M8 交付
 
