@@ -87,6 +87,9 @@ var speed_slider: HSlider
 var seed_input: LineEdit
 var continue_button: Button
 var mute_check: CheckBox
+var _menu_intro_nodes: Array[Control] = []
+var _menu_intro_tweens: Array[Tween] = []
+var _menu_intro_gen := 0
 
 func _ready() -> void:
 	settings = TpGame.load_settings()
@@ -657,6 +660,11 @@ func _build_menu(root: Control) -> void:
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(footer)
 
+	for node in [title, sub, hint, start, endless, coop, settings_btn, continue_button, footer]:
+		_menu_intro_nodes.append(node as Control)
+	for button in [start, endless, coop, settings_btn, continue_button]:
+		_bind_menu_button_motion(button as Button)
+
 func _build_settings(root: Control) -> void:
 	var parts := _dialog(560, 660)
 	settings_overlay = parts[0]
@@ -850,6 +858,48 @@ func _show_menu() -> void:
 	over_overlay.visible = false
 	continue_button.disabled = not TpGame.has_save()
 	update_touch_visibility()
+	_play_menu_intro()
+
+func _play_menu_intro() -> void:
+	_menu_intro_gen += 1
+	var gen := _menu_intro_gen
+	for tween in _menu_intro_tweens:
+		if tween and tween.is_valid():
+			tween.kill()
+	_menu_intro_tweens.clear()
+	if _menu_intro_nodes.is_empty():
+		return
+	for node in _menu_intro_nodes:
+		node.modulate.a = 0.0
+		node.scale = Vector2(0.86, 0.86)
+	await get_tree().process_frame
+	if gen != _menu_intro_gen or not menu_overlay.visible:
+		return
+	var count := _menu_intro_nodes.size()
+	for i in count:
+		var node := _menu_intro_nodes[i]
+		node.pivot_offset = node.size * 0.5
+		var tween := create_tween()
+		tween.tween_interval(0.045 * i)
+		tween.tween_property(node, "modulate:a", 1.0, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.parallel().tween_property(node, "scale", Vector2.ONE, 0.34).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_menu_intro_tweens.append(tween)
+
+func _bind_menu_button_motion(button: Button) -> void:
+	button.resized.connect(func() -> void: button.pivot_offset = button.size * 0.5)
+	button.mouse_entered.connect(func() -> void: _menu_button_scale(button, 1.05))
+	button.mouse_exited.connect(func() -> void: _menu_button_scale(button, 1.0))
+	button.button_down.connect(func() -> void: _menu_button_scale(button, 0.94, 0.07))
+	button.button_up.connect(func() -> void: _menu_button_scale(button, 1.0, 0.2))
+
+func _menu_button_scale(button: Button, target: float, duration: float = 0.12) -> void:
+	if button.has_meta("scale_tween"):
+		var old: Tween = button.get_meta("scale_tween")
+		if old and old.is_valid():
+			old.kill()
+	var tween := create_tween()
+	tween.tween_property(button, "scale", Vector2.ONE * target, duration).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	button.set_meta("scale_tween", tween)
 
 func _save_settings_from_ui() -> void:
 	if diff_select == null:
@@ -878,6 +928,7 @@ func _close_settings() -> void:
 	settings_overlay.visible = false
 	menu_overlay.visible = true
 	update_touch_visibility()
+	_play_menu_intro()
 
 func _start_from_menu() -> void:
 	_save_settings_from_ui()

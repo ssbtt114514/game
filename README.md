@@ -94,7 +94,7 @@ configs/             默认 / 极难 / 趣味自定义三份 JSON 预设
 
 ## Godot Android 版
 
-`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 157 项、界面与存档冒烟测试 35 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
+`godot/` 目录是同一套规则的 Godot 4.3 / GDScript 实现，通过 `dulvui/godot-android-export` 编译签名 APK。规则测试 157 项、界面与存档冒烟测试 40 项通过；支持 Android、Windows 与 Web 构建；详情见 `godot/README.md`。
 
 ```bash
 # 启动 Godot 工程

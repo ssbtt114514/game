@@ -99,13 +99,25 @@ func _run() -> void:
 	main._open_net()
 	check(main.net_overlay.visible, "打开局域网页")
 	main._net_close_and_menu()
+	await create_timer(0.7).timeout
 	check(not main.net_overlay.visible and main.menu_overlay.visible, "局域网返回主页")
+	check(main.menu_overlay.get_child(0) != null and main._menu_intro_nodes.size() == 9, "主页入场动画节点")
 	var start_btn: Button = null
 	for node in main.menu_overlay.find_children("*", "Button", true, false):
 		if (node as Button).text.begins_with("开始游戏"):
 			start_btn = node
 	check(start_btn != null, "主页存在开始按钮")
 	if start_btn != null:
+		check(is_equal_approx(start_btn.modulate.a, 1.0) and start_btn.scale.distance_to(Vector2.ONE) < 0.02, "按钮入场动画完成")
+		start_btn.mouse_entered.emit()
+		await create_timer(0.2).timeout
+		check(start_btn.scale.x > 1.0, "按钮悬停放大")
+		start_btn.button_down.emit()
+		await create_timer(0.12).timeout
+		check(start_btn.scale.x < 1.0, "按钮按下缩小")
+		start_btn.button_up.emit()
+		await create_timer(0.3).timeout
+		check(start_btn.scale.distance_to(Vector2.ONE) < 0.02, "按钮回弹复位")
 		var center := start_btn.get_global_rect().get_center()
 		var press := InputEventScreenTouch.new()
 		press.position = center
