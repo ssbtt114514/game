@@ -12,7 +12,7 @@
 
 ### 说明
 
-- Actions 分支构建默认注入 `dev_mode=true`；GitHub Release、`release` 手动构建或 `v*` 标签构建关闭开发模式。
+- Actions 分支构建默认注入 `dev_mode=true`；GitHub Release 或 `release` 手动构建关闭开发模式。
 - 联机模式禁用开发工具，避免状态不同步。
 
 ### 测试

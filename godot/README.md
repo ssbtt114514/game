@@ -33,7 +33,7 @@ xvfb-run -a godot --path godot --display-driver x11 --rendering-driver opengl3 -
 
 ## 开发模式
 
-`project.godot` 的 `[tetrisplus] dev_mode` 控制开发工具。开启后主页出现「开发模式」按钮，游戏中按 F9 打开，可修改分数、跳转阶段与调节速度；联机模式禁用。CI 仅在非发布构建注入 `dev_mode=true`，GitHub Release、`release` 手动构建和 `v*` 标签构建保持关闭。
+`project.godot` 的 `[tetrisplus] dev_mode` 控制开发工具。开启后主页出现「开发模式」按钮，游戏中按 F9 打开，可修改分数、跳转阶段与调节速度；联机模式禁用。CI 仅在非发布构建注入 `dev_mode=true`，GitHub Release 与 `release` 手动构建保持关闭。
 
 ## Android 导出
 

@@ -106,7 +106,7 @@ godot --headless --path godot -s res://tests/run_tests.gd
 
 推送 `godot/` 变更后，`Android APK` 工作流会构建 `godot/build/tetris-plus.apk` 并上传 artifact。
 
-非发布构建会在 `project.godot` 注入 `tetrisplus/dev_mode=true`，主页出现「开发模式」按钮，游戏中可按 F9 打开，调整分数、阶段与速度。GitHub Release、`release` 手动构建或 `v*` 标签构建保持 `dev_mode=false`。APK 同时包含 `armeabi-v7a` 与 `arm64-v8a`，可安装在 32 位与 64 位设备上。
+非发布构建会在 `project.godot` 注入 `tetrisplus/dev_mode=true`，主页出现「开发模式」按钮，游戏中可按 F9 打开，调整分数、阶段与速度。GitHub Release 或勾选 `release` 的手动构建保持 `dev_mode=false`。APK 同时包含 `armeabi-v7a` 与 `arm64-v8a`，可安装在 32 位与 64 位设备上。
 
 ## 配置预设
 
