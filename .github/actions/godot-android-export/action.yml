@@ -98,6 +98,7 @@ runs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
       run: |
+        mkdir -p ~/.config/godot
         echo "$SETTINGS" >> ~/.config/godot/editor_settings-4.tres
         echo "export/android/java_sdk_path = \"$JAVA_HOME\"" >> ~/.config/godot/editor_settings-4.tres
 
